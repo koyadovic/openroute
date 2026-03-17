@@ -8,6 +8,11 @@ import kotlin.math.sqrt
 import kotlin.math.roundToLong
 import kotlin.math.sin
 
+enum class RouteTravelDirection {
+    Forward,
+    Backward,
+}
+
 data class RouteNavigationProgress(
     val nearestRoutePointIndex: Int,
     val completedDistanceMeters: Double,
@@ -18,6 +23,8 @@ data class RouteNavigationProgress(
     val currentSpeedMetersPerSecond: Double? = null,
     val displayLocation: LatLngPoint? = null,
     val isLocationSnappedToRoute: Boolean = false,
+    val headingDegrees: Double = 0.0,
+    val travelDirection: RouteTravelDirection = RouteTravelDirection.Forward,
 )
 
 object RouteNavigationEngine {
@@ -57,6 +64,26 @@ object RouteNavigationEngine {
         val currentSpeed = (recentLocations + displayLocation)
             .takeLast(MAX_SPEED_SAMPLES)
             .estimateSpeedMetersPerSecond()
+        val routeHeadingForward = route.points.headingDegreesFromProjection(nearestProjection)
+        val routeHeadingBackward = routeHeadingForward?.let(::reverseHeadingDegrees)
+        val movementHeading = (recentLocations + displayLocation)
+            .takeLast(MAX_HEADING_SAMPLES)
+            .movementHeadingDegrees()
+        val sensorHeading = currentLocation.bearingDegrees?.normalizeHeadingDegrees()
+        val travelDirection = resolveTravelDirection(
+            movementHeading = movementHeading,
+            sensorHeading = sensorHeading,
+            routeHeadingForward = routeHeadingForward,
+        )
+        val routeHeading = when (travelDirection) {
+            RouteTravelDirection.Forward -> routeHeadingForward ?: routeHeadingBackward
+            RouteTravelDirection.Backward -> routeHeadingBackward ?: routeHeadingForward
+        }
+        val headingDegrees = resolveHeadingDegrees(
+            movementHeading = movementHeading,
+            sensorHeading = sensorHeading,
+            routeHeading = routeHeading,
+        )
 
         return RouteNavigationProgress(
             nearestRoutePointIndex = nearestIndex,
@@ -74,6 +101,8 @@ object RouteNavigationEngine {
             currentSpeedMetersPerSecond = currentSpeed,
             displayLocation = displayLocation,
             isLocationSnappedToRoute = displayLocation != currentLocation,
+            headingDegrees = headingDegrees,
+            travelDirection = travelDirection,
         )
     }
 }
@@ -166,6 +195,7 @@ private fun projectPointOntoSegment(
     val projectedPoint = LocalPoint(projectedX, projectedY).toLatLngPoint(
         reference = localReference,
         timestampMillis = referencePoint.timestampMillis,
+        bearingDegrees = referencePoint.bearingDegrees,
     )
     val segmentLengthMeters = sqrt(segmentLengthSquared)
 
@@ -199,6 +229,37 @@ private fun List<LatLngPoint>.estimateSpeedMetersPerSecond(): Double? {
     return distanceMeters / elapsedSeconds
 }
 
+private fun List<LatLngPoint>.movementHeadingDegrees(): Double? {
+    if (size < 2) {
+        return null
+    }
+
+    val latestPoint = last()
+    val anchorPoint = asReversed()
+        .drop(1)
+        .firstOrNull { candidate ->
+            candidate.distanceTo(latestPoint) >= MIN_HEADING_DISTANCE_METERS
+        }
+        ?: return null
+
+    return anchorPoint.headingDegreesTo(latestPoint)
+}
+
+private fun List<LatLngPoint>.headingDegreesFromProjection(
+    projection: RouteProjection,
+): Double? {
+    if (size < 2) {
+        return null
+    }
+
+    val targetIndex = (projection.segmentStartIndex + ROUTE_HEADING_LOOKAHEAD_POINTS)
+        .coerceAtMost(lastIndex)
+        .takeIf { it >= projection.segmentStartIndex + 1 }
+        ?: (projection.segmentStartIndex + 1).coerceAtMost(lastIndex)
+
+    return projection.projectedPoint.headingDegreesTo(get(targetIndex))
+}
+
 private fun LatLngPoint.distanceTo(other: LatLngPoint): Double {
     val earthRadiusMeters = 6_371_000.0
     val latDistance = (other.latitude - latitude).toRadians()
@@ -211,6 +272,88 @@ private fun LatLngPoint.distanceTo(other: LatLngPoint): Double {
         cos(startLat) * cos(endLat) * sin(lonDistance / 2).pow(2)
 
     return 2 * earthRadiusMeters * asin(kotlin.math.sqrt(a.coerceIn(0.0, 1.0)))
+}
+
+private fun LatLngPoint.headingDegreesTo(other: LatLngPoint): Double {
+    val averageLatitudeRadians = ((latitude + other.latitude) / 2.0).toRadians()
+    val longitudeDelta = (other.longitude - longitude) * cos(averageLatitudeRadians)
+    val latitudeDelta = other.latitude - latitude
+    return Math.toDegrees(kotlin.math.atan2(longitudeDelta, latitudeDelta)).normalizeHeadingDegrees()
+}
+
+private fun resolveTravelDirection(
+    movementHeading: Double?,
+    sensorHeading: Double?,
+    routeHeadingForward: Double?,
+): RouteTravelDirection {
+    val headingToCompare = movementHeading ?: sensorHeading ?: return RouteTravelDirection.Forward
+    val forwardHeading = routeHeadingForward ?: return RouteTravelDirection.Forward
+
+    return if (headingDifferenceDegrees(headingToCompare, forwardHeading) <= 90.0) {
+        RouteTravelDirection.Forward
+    } else {
+        RouteTravelDirection.Backward
+    }
+}
+
+private fun resolveHeadingDegrees(
+    movementHeading: Double?,
+    sensorHeading: Double?,
+    routeHeading: Double?,
+): Double {
+    return when {
+        movementHeading != null && routeHeading != null ->
+            blendHeadingDegrees(
+                movementHeading to 0.8,
+                routeHeading to 0.2,
+            )
+
+        movementHeading != null && sensorHeading != null ->
+            blendHeadingDegrees(
+                movementHeading to 0.85,
+                sensorHeading to 0.15,
+            )
+
+        movementHeading != null -> movementHeading
+        routeHeading != null && sensorHeading != null ->
+            blendHeadingDegrees(
+                routeHeading to 0.75,
+                sensorHeading to 0.25,
+            )
+
+        routeHeading != null -> routeHeading
+        sensorHeading != null -> sensorHeading
+        else -> 0.0
+    }
+}
+
+private fun blendHeadingDegrees(vararg headings: Pair<Double, Double>): Double {
+    val totalWeight = headings.sumOf { it.second }.takeIf { it > 0.0 } ?: return 0.0
+    val weightedSin = headings.sumOf { (heading, weight) ->
+        sin(heading.toRadians()) * weight
+    }
+    val weightedCos = headings.sumOf { (heading, weight) ->
+        cos(heading.toRadians()) * weight
+    }
+    if (weightedSin == 0.0 && weightedCos == 0.0) {
+        return headings.first().first.normalizeHeadingDegrees()
+    }
+
+    return Math.toDegrees(kotlin.math.atan2(weightedSin / totalWeight, weightedCos / totalWeight))
+        .normalizeHeadingDegrees()
+}
+
+private fun reverseHeadingDegrees(headingDegrees: Double): Double {
+    return (headingDegrees + 180.0).normalizeHeadingDegrees()
+}
+
+private fun headingDifferenceDegrees(first: Double, second: Double): Double {
+    val difference = kotlin.math.abs(first.normalizeHeadingDegrees() - second.normalizeHeadingDegrees())
+    return if (difference > 180.0) 360.0 - difference else difference
+}
+
+private fun Double.normalizeHeadingDegrees(): Double {
+    return ((this % 360.0) + 360.0) % 360.0
 }
 
 private fun Double.toRadians(): Double = this * PI / 180.0
@@ -235,7 +378,11 @@ private fun LatLngPoint.toLocalPoint(reference: LocalReference): LocalPoint {
     )
 }
 
-private fun LocalPoint.toLatLngPoint(reference: LocalReference, timestampMillis: Long?): LatLngPoint {
+private fun LocalPoint.toLatLngPoint(
+    reference: LocalReference,
+    timestampMillis: Long?,
+    bearingDegrees: Double?,
+): LatLngPoint {
     val metersPerDegreeLatitude = EARTH_RADIUS_METERS * PI / 180.0
     val metersPerDegreeLongitude = metersPerDegreeLatitude * cos(reference.latitude.toRadians())
 
@@ -243,10 +390,14 @@ private fun LocalPoint.toLatLngPoint(reference: LocalReference, timestampMillis:
         latitude = reference.latitude + (y / metersPerDegreeLatitude),
         longitude = reference.longitude + (x / metersPerDegreeLongitude),
         timestampMillis = timestampMillis,
+        bearingDegrees = bearingDegrees,
     )
 }
 
 private const val EARTH_RADIUS_METERS = 6_371_000.0
 private const val MAX_SPEED_SAMPLES = 6
+private const val MAX_HEADING_SAMPLES = 5
 private const val MIN_MOVING_SPEED_METERS_PER_SECOND = 0.6
+private const val MIN_HEADING_DISTANCE_METERS = 8.0
 private const val MAX_ROUTE_SNAP_DISTANCE_METERS = 30.0
+private const val ROUTE_HEADING_LOOKAHEAD_POINTS = 3

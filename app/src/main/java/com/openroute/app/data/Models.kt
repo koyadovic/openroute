@@ -12,6 +12,7 @@ data class LatLngPoint(
     val latitude: Double,
     val longitude: Double,
     val timestampMillis: Long? = null,
+    val bearingDegrees: Double? = null,
 )
 
 @Serializable

@@ -38,6 +38,8 @@ class RouteNavigationEngineTest {
         assertTrue(progress.completionRatio in 0.3..0.7)
         assertTrue(progress.distanceToRouteMeters < 5.0)
         assertTrue(progress.estimatedRemainingSeconds != null)
+        assertEquals(RouteTravelDirection.Forward, progress.travelDirection)
+        assertTrue(progress.headingDegrees <= 15.0 || progress.headingDegrees >= 345.0)
     }
 
     @Test
@@ -94,5 +96,62 @@ class RouteNavigationEngineTest {
         assertTrue(progress.distanceToRouteMeters > 30.0)
         assertEquals(rawLocation.longitude, progress.displayLocation?.longitude ?: 0.0, 0.00001)
         assertEquals(rawLocation.latitude, progress.displayLocation?.latitude ?: 0.0, 0.00001)
+    }
+
+    @Test
+    fun `prefers recent movement to orient navigation and detects backward travel`() {
+        val route = RouteTrack(
+            id = "route-4",
+            name = "Straight",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1L,
+            distanceMeters = 0.0,
+            points = listOf(
+                LatLngPoint(40.0, -3.0),
+                LatLngPoint(40.001, -3.0),
+                LatLngPoint(40.002, -3.0),
+            ),
+        )
+        val recentLocations = listOf(
+            LatLngPoint(40.0018, -3.0, timestampMillis = 0L),
+            LatLngPoint(40.0015, -3.0, timestampMillis = 30_000L),
+            LatLngPoint(40.0012, -3.0, timestampMillis = 60_000L),
+        )
+
+        val progress = RouteNavigationEngine.calculate(
+            route = route,
+            currentLocation = recentLocations.last(),
+            recentLocations = recentLocations.dropLast(1),
+        )
+
+        assertEquals(RouteTravelDirection.Backward, progress.travelDirection)
+        assertTrue(progress.headingDegrees in 150.0..210.0)
+    }
+
+    @Test
+    fun `falls back to measured bearing when recent movement is not available`() {
+        val route = RouteTrack(
+            id = "route-5",
+            name = "Pin",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1L,
+            distanceMeters = 0.0,
+            points = listOf(
+                LatLngPoint(40.0, -3.0),
+            ),
+        )
+
+        val progress = RouteNavigationEngine.calculate(
+            route = route,
+            currentLocation = LatLngPoint(
+                40.0,
+                -3.0,
+                timestampMillis = 30_000L,
+                bearingDegrees = 92.0,
+            ),
+            recentLocations = emptyList(),
+        )
+
+        assertEquals(92.0, progress.headingDegrees, 0.001)
     }
 }

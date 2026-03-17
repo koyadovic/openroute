@@ -7,6 +7,7 @@ import com.openroute.app.data.Navigation3DRenderState
 import com.openroute.app.data.RouteNavigationProgress
 import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
+import com.openroute.app.data.RouteTravelDirection
 import com.openroute.app.data.effectiveDurationMillis
 import kotlin.math.roundToInt
 
@@ -170,7 +171,6 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
         ?.toNavigation3DState(
             progress = navigationProgress,
             currentLocation = navigationState.currentLocation,
-            visitedPoints = navigationState.visitedPoints,
         )
 
     return OpenRouteScreenState(
@@ -307,9 +307,9 @@ private fun RouteTrack.toDetailState(
 private fun RouteTrack.toNavigation3DState(
     progress: RouteNavigationProgress?,
     currentLocation: com.openroute.app.data.LatLngPoint?,
-    visitedPoints: List<com.openroute.app.data.LatLngPoint>,
 ): Navigation3DState {
     val nearestIndex = progress?.nearestRoutePointIndex ?: 0
+    val travelDirection = progress?.travelDirection ?: RouteTravelDirection.Forward
     return Navigation3DState(
         routeId = id,
         title = name,
@@ -326,10 +326,16 @@ private fun RouteTrack.toNavigation3DState(
         distanceToRouteLabel = progress?.distanceToRouteMeters.toDistanceLabel(),
         showsOffRouteAlert = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
         renderState = Navigation3DRenderState(
-            routePoints = routeWindowAround(nearestIndex),
-            visitedPoints = visitedPoints.takeLast(NAVIGATION_3D_VISITED_POINTS_WINDOW),
+            routePoints = routeWindowAround(
+                nearestIndex = nearestIndex,
+                travelDirection = travelDirection,
+            ).simplifyFor3D(),
+            visitedPoints = emptyList(),
             currentLocation = currentLocation,
-            headingDegrees = headingDegreesAround(nearestIndex),
+            headingDegrees = progress?.headingDegrees ?: headingDegreesAround(
+                nearestIndex = nearestIndex,
+                travelDirection = travelDirection,
+            ),
             isOffRoute = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
         ),
     )
@@ -357,29 +363,196 @@ private fun RouteTrack.metricsSubtitle(): String {
     }.joinToString(" · ")
 }
 
-private fun RouteTrack.routeWindowAround(nearestIndex: Int): List<com.openroute.app.data.LatLngPoint> {
+private fun RouteTrack.routeWindowAround(
+    nearestIndex: Int,
+    travelDirection: RouteTravelDirection,
+): List<com.openroute.app.data.LatLngPoint> {
     if (points.isEmpty()) {
         return emptyList()
     }
 
-    val startIndex = (nearestIndex - NAVIGATION_3D_POINTS_BEHIND).coerceAtLeast(0)
-    val endIndex = (nearestIndex + NAVIGATION_3D_POINTS_AHEAD).coerceAtMost(points.lastIndex)
-    return points.subList(startIndex, endIndex + 1)
+    val step = when (travelDirection) {
+        RouteTravelDirection.Forward -> 1
+        RouteTravelDirection.Backward -> -1
+    }
+    val startIndex = nearestIndex - (NAVIGATION_3D_POINTS_BEHIND * step)
+    return collectDirectionalWindow(
+        startIndex = startIndex,
+        step = step,
+        size = NAVIGATION_3D_POINTS_BEHIND + NAVIGATION_3D_POINTS_AHEAD + 1,
+        wrapAround = isClosedLoop(),
+    )
 }
 
-private fun RouteTrack.headingDegreesAround(nearestIndex: Int): Double {
+private fun RouteTrack.collectDirectionalWindow(
+    startIndex: Int,
+    step: Int,
+    size: Int,
+    wrapAround: Boolean,
+): List<com.openroute.app.data.LatLngPoint> {
+    if (points.isEmpty()) {
+        return emptyList()
+    }
+
+    val windowSize = if (wrapAround) {
+        size.coerceAtMost(points.size)
+    } else {
+        size
+    }
+
+    return buildList(windowSize) {
+        repeat(windowSize) { offset ->
+            val rawIndex = startIndex + (offset * step)
+            val index = if (wrapAround) {
+                rawIndex.floorMod(points.size)
+            } else {
+                rawIndex
+            }
+            points.getOrNull(index)?.let(::add)
+        }
+    }
+}
+
+private fun List<com.openroute.app.data.LatLngPoint>.simplifyFor3D(): List<com.openroute.app.data.LatLngPoint> {
+    if (size <= 3) {
+        return this
+    }
+
+    val simplified = douglasPeucker(
+        points = this,
+        toleranceMeters = NAVIGATION_3D_SIMPLIFICATION_TOLERANCE_METERS,
+    )
+    return if (simplified.size >= 2) simplified else this
+}
+
+private fun douglasPeucker(
+    points: List<com.openroute.app.data.LatLngPoint>,
+    toleranceMeters: Double,
+): List<com.openroute.app.data.LatLngPoint> {
+    if (points.size <= 2) {
+        return points
+    }
+
+    var maxDistance = 0.0
+    var splitIndex = -1
+    for (index in 1 until points.lastIndex) {
+        val distance = perpendicularDistanceMeters(
+            point = points[index],
+            segmentStart = points.first(),
+            segmentEnd = points.last(),
+        )
+        if (distance > maxDistance) {
+            maxDistance = distance
+            splitIndex = index
+        }
+    }
+
+    if (maxDistance <= toleranceMeters || splitIndex == -1) {
+        return listOf(points.first(), points.last())
+    }
+
+    val left = douglasPeucker(points.subList(0, splitIndex + 1), toleranceMeters)
+    val right = douglasPeucker(points.subList(splitIndex, points.size), toleranceMeters)
+    return left.dropLast(1) + right
+}
+
+private fun perpendicularDistanceMeters(
+    point: com.openroute.app.data.LatLngPoint,
+    segmentStart: com.openroute.app.data.LatLngPoint,
+    segmentEnd: com.openroute.app.data.LatLngPoint,
+): Double {
+    val referenceLatitude = Math.toRadians(
+        (point.latitude + segmentStart.latitude + segmentEnd.latitude) / 3.0,
+    )
+    val metersPerDegreeLatitude = 111_320.0
+    val metersPerDegreeLongitude = kotlin.math.cos(referenceLatitude) * metersPerDegreeLatitude
+
+    val startX = segmentStart.longitude * metersPerDegreeLongitude
+    val startY = segmentStart.latitude * metersPerDegreeLatitude
+    val endX = segmentEnd.longitude * metersPerDegreeLongitude
+    val endY = segmentEnd.latitude * metersPerDegreeLatitude
+    val pointX = point.longitude * metersPerDegreeLongitude
+    val pointY = point.latitude * metersPerDegreeLatitude
+
+    val segmentDeltaX = endX - startX
+    val segmentDeltaY = endY - startY
+    val segmentLengthSquared = (segmentDeltaX * segmentDeltaX) + (segmentDeltaY * segmentDeltaY)
+    if (segmentLengthSquared <= 1e-6) {
+        return kotlin.math.hypot(pointX - startX, pointY - startY)
+    }
+
+    val t = (((pointX - startX) * segmentDeltaX) + ((pointY - startY) * segmentDeltaY)) /
+        segmentLengthSquared
+    val clampedT = t.coerceIn(0.0, 1.0)
+    val projectionX = startX + (segmentDeltaX * clampedT)
+    val projectionY = startY + (segmentDeltaY * clampedT)
+
+    return kotlin.math.hypot(pointX - projectionX, pointY - projectionY)
+}
+
+private fun RouteTrack.headingDegreesAround(
+    nearestIndex: Int,
+    travelDirection: RouteTravelDirection,
+): Double {
     if (points.size < 2) {
         return 0.0
     }
 
-    val fromIndex = (nearestIndex - 1).coerceAtLeast(0)
-    val toIndex = (nearestIndex + 1).coerceAtMost(points.lastIndex)
+    val wrapAround = isClosedLoop()
+    val step = when (travelDirection) {
+        RouteTravelDirection.Forward -> 1
+        RouteTravelDirection.Backward -> -1
+    }
+    val fromIndex = normalizeRouteIndex(nearestIndex, wrapAround) ?: return 0.0
+    val toIndex = normalizeRouteIndex(nearestIndex + step, wrapAround)
+        ?: normalizeRouteIndex(nearestIndex - step, wrapAround)
+        ?: return 0.0
+
+    if (fromIndex == toIndex) {
+        return 0.0
+    }
     val from = points[fromIndex]
     val to = points[toIndex]
 
     val latitudeDelta = to.latitude - from.latitude
     val longitudeDelta = to.longitude - from.longitude
     return Math.toDegrees(kotlin.math.atan2(longitudeDelta, latitudeDelta))
+}
+
+private fun RouteTrack.normalizeRouteIndex(
+    index: Int,
+    wrapAround: Boolean,
+): Int? {
+    return if (wrapAround) {
+        index.floorMod(points.size)
+    } else {
+        index.takeIf { it in points.indices }
+    }
+}
+
+private fun RouteTrack.isClosedLoop(): Boolean {
+    return points.size >= 4 &&
+        points.first().distanceTo(points.last()) <= CLOSED_LOOP_ROUTE_THRESHOLD_METERS
+}
+
+private fun com.openroute.app.data.LatLngPoint.distanceTo(
+    other: com.openroute.app.data.LatLngPoint,
+): Double {
+    val earthRadiusMeters = 6_371_000.0
+    val latitudeDeltaRadians = Math.toRadians(other.latitude - latitude)
+    val longitudeDeltaRadians = Math.toRadians(other.longitude - longitude)
+    val startLatitudeRadians = Math.toRadians(latitude)
+    val endLatitudeRadians = Math.toRadians(other.latitude)
+    val a = kotlin.math.sin(latitudeDeltaRadians / 2).let { it * it } +
+        kotlin.math.cos(startLatitudeRadians) *
+        kotlin.math.cos(endLatitudeRadians) *
+        kotlin.math.sin(longitudeDeltaRadians / 2).let { it * it }
+
+    return 2 * earthRadiusMeters * kotlin.math.asin(kotlin.math.sqrt(a.coerceIn(0.0, 1.0)))
+}
+
+private fun Int.floorMod(modulus: Int): Int {
+    return ((this % modulus) + modulus) % modulus
 }
 
 internal fun Double?.toDistanceLabel(): String {
@@ -426,4 +599,5 @@ private fun Long?.toEtaLabel(): String {
 private const val OFF_ROUTE_ALERT_DISTANCE_METERS = 50.0
 private const val NAVIGATION_3D_POINTS_BEHIND = 8
 private const val NAVIGATION_3D_POINTS_AHEAD = 28
-private const val NAVIGATION_3D_VISITED_POINTS_WINDOW = 32
+private const val CLOSED_LOOP_ROUTE_THRESHOLD_METERS = 35.0
+private const val NAVIGATION_3D_SIMPLIFICATION_TOLERANCE_METERS = 4.0

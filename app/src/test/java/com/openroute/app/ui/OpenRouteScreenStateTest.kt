@@ -322,6 +322,8 @@ class OpenRouteScreenStateTest {
                     currentSpeedMetersPerSecond = 4.2,
                     displayLocation = LatLngPoint(40.4011, -3.69945),
                     isLocationSnappedToRoute = true,
+                    headingDegrees = 172.0,
+                    travelDirection = com.openroute.app.data.RouteTravelDirection.Backward,
                 ),
             ),
         ).toScreenState()
@@ -330,7 +332,103 @@ class OpenRouteScreenStateTest {
         assertEquals("3D Ride", screenState.navigation3DState?.title)
         assertEquals("Guía 3D aproximada", screenState.navigation3DState?.subtitle)
         assertEquals("15%", screenState.navigation3DState?.progressLabel)
+        assertEquals(172.0, screenState.navigation3DState?.renderState?.headingDegrees ?: 0.0, 0.001)
         assertTrue((screenState.navigation3DState?.renderState?.routePoints?.size ?: 0) >= 2)
-        assertEquals(2, screenState.navigation3DState?.renderState?.visitedPoints?.size)
+        assertTrue(screenState.navigation3DState?.renderState?.visitedPoints?.isEmpty() == true)
+    }
+
+    @Test
+    fun `wraps 3d route window for closed loops near the end of the track`() {
+        val route = RouteTrack(
+            id = "route-loop",
+            name = "Loop Ride",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 320.0,
+            points = listOf(
+                LatLngPoint(40.00000, -3.00000),
+                LatLngPoint(40.00025, -3.00000),
+                LatLngPoint(40.00025, -2.99975),
+                LatLngPoint(40.00000, -2.99975),
+                LatLngPoint(40.00000, -3.00000),
+            ),
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(route),
+            selectedRouteId = route.id,
+            detailRouteId = route.id,
+            navigation3DRouteId = route.id,
+            navigationState = NavigationState(
+                isNavigating = true,
+                route = route,
+                currentLocation = LatLngPoint(40.00000, -2.99990),
+                progress = com.openroute.app.data.RouteNavigationProgress(
+                    nearestRoutePointIndex = route.points.lastIndex,
+                    completedDistanceMeters = 300.0,
+                    remainingDistanceMeters = 20.0,
+                    completionRatio = 0.94,
+                    distanceToRouteMeters = 4.0,
+                    displayLocation = LatLngPoint(40.00000, -2.99990),
+                    isLocationSnappedToRoute = true,
+                    headingDegrees = 90.0,
+                    travelDirection = com.openroute.app.data.RouteTravelDirection.Forward,
+                ),
+            ),
+        ).toScreenState()
+
+        val routeWindow = screenState.navigation3DState?.renderState?.routePoints.orEmpty()
+        assertTrue(routeWindow.size >= 4)
+        assertEquals(route.points.first(), routeWindow.last())
+        assertTrue(routeWindow.any { it == route.points[1] })
+    }
+
+    @Test
+    fun `simplifies dense 3d route geometry while preserving right angle corner`() {
+        val route = RouteTrack(
+            id = "route-corner",
+            name = "Corner Ride",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 120.0,
+            points = listOf(
+                LatLngPoint(40.00000, -3.00000),
+                LatLngPoint(40.00006, -3.00000),
+                LatLngPoint(40.00012, -3.00000),
+                LatLngPoint(40.00018, -3.00000),
+                LatLngPoint(40.00018, -2.99994),
+                LatLngPoint(40.00018, -2.99988),
+                LatLngPoint(40.00018, -2.99982),
+            ),
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(route),
+            selectedRouteId = route.id,
+            detailRouteId = route.id,
+            navigation3DRouteId = route.id,
+            navigationState = NavigationState(
+                isNavigating = true,
+                route = route,
+                currentLocation = LatLngPoint(40.00018, -2.99995),
+                progress = com.openroute.app.data.RouteNavigationProgress(
+                    nearestRoutePointIndex = 4,
+                    completedDistanceMeters = 70.0,
+                    remainingDistanceMeters = 50.0,
+                    completionRatio = 0.58,
+                    distanceToRouteMeters = 2.0,
+                    displayLocation = LatLngPoint(40.00018, -2.99995),
+                    isLocationSnappedToRoute = true,
+                    headingDegrees = 90.0,
+                    travelDirection = com.openroute.app.data.RouteTravelDirection.Forward,
+                ),
+            ),
+        ).toScreenState()
+
+        val routeWindow = screenState.navigation3DState?.renderState?.routePoints.orEmpty()
+        assertTrue(routeWindow.size < route.points.size)
+        assertTrue(routeWindow.contains(LatLngPoint(40.00018, -3.00000)))
     }
 }

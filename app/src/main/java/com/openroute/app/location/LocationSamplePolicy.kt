@@ -11,6 +11,7 @@ internal data class LocationSample(
     val capturedAtMillis: Long,
     val receivedAtMillis: Long,
     val accuracyMeters: Float? = null,
+    val bearingDegrees: Double? = null,
 )
 
 internal object LocationSamplePolicy {
@@ -24,6 +25,7 @@ internal object LocationSamplePolicy {
             latitude = sample.latitude,
             longitude = sample.longitude,
             timestampMillis = sample.capturedAtMillis,
+            bearingDegrees = sample.bearingDegrees,
         )
     }
 
@@ -79,6 +81,7 @@ internal fun Location.toLocationSample(receivedAtMillis: Long = System.currentTi
         capturedAtMillis = capturedAtMillis,
         receivedAtMillis = receivedAtMillis,
         accuracyMeters = accuracy.takeIf { hasAccuracy() },
+        bearingDegrees = bearing.takeIf { hasBearing() }?.toDouble(),
     )
 }
 
