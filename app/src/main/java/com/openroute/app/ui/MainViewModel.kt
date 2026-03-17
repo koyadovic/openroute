@@ -38,6 +38,8 @@ internal data class OpenRouteUiState(
     val liveTrack: List<com.openroute.app.data.LatLngPoint> = emptyList(),
     val currentLocation: com.openroute.app.data.LatLngPoint? = null,
     val navigationState: NavigationState = NavigationState(),
+    val showsHiddenRoutes: Boolean = false,
+    val deleteRouteId: String? = null,
     val renameRouteId: String? = null,
     val renameDraft: String = "",
     val message: String? = null,
@@ -45,6 +47,11 @@ internal data class OpenRouteUiState(
     val visibleRoutes: List<RouteTrack>
         get() = routes
             .filterNot(RouteTrack::isHidden)
+            .sortedByDistanceTo(navigationState.currentLocation ?: currentLocation)
+
+    val hiddenRoutes: List<RouteTrack>
+        get() = routes
+            .filter(RouteTrack::isHidden)
             .sortedByDistanceTo(navigationState.currentLocation ?: currentLocation)
 
     val selectedRoute: RouteTrack?
@@ -55,6 +62,9 @@ internal data class OpenRouteUiState(
 
     val navigation3DRoute: RouteTrack?
         get() = visibleRoutes.firstOrNull { it.id == navigation3DRouteId }
+
+    val routePendingDeletion: RouteTrack?
+        get() = routes.firstOrNull { it.id == deleteRouteId }
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -288,6 +298,52 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     navigation3DRouteId = current.navigation3DRouteId
                         ?.takeIf { sceneId -> sceneId != routeId && routes.any { route -> route.id == sceneId && !route.isHidden } },
                     message = "Ruta oculta: ${hiddenRoute.name}",
+                )
+            }
+        }
+    }
+
+    fun toggleHiddenRoutesVisibility() {
+        _uiState.update { current ->
+            current.copy(
+                showsHiddenRoutes = if (current.hiddenRoutes.isEmpty()) {
+                    false
+                } else {
+                    !current.showsHiddenRoutes
+                },
+            )
+        }
+    }
+
+    fun requestDeleteRoute(routeId: String) {
+        val route = _uiState.value.hiddenRoutes.firstOrNull { it.id == routeId } ?: return
+        _uiState.update { current ->
+            current.copy(deleteRouteId = route.id)
+        }
+    }
+
+    fun dismissDeleteRoute() {
+        _uiState.update { it.copy(deleteRouteId = null) }
+    }
+
+    fun confirmDeleteRoute() {
+        val routeId = _uiState.value.deleteRouteId ?: return
+
+        viewModelScope.launch {
+            val deletedRoute = repository.deleteRoute(routeId) ?: return@launch
+            val routes = repository.loadRoutes()
+
+            _uiState.update { current ->
+                current.copy(
+                    routes = routes,
+                    selectedRouteId = current.resolveNextSelectedRouteId(routes),
+                    detailRouteId = current.detailRouteId
+                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId && !route.isHidden } },
+                    navigation3DRouteId = current.navigation3DRouteId
+                        ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
+                    showsHiddenRoutes = current.showsHiddenRoutes && routes.any(RouteTrack::isHidden),
+                    deleteRouteId = null,
+                    message = "Ruta eliminada: ${deletedRoute.name}",
                 )
             }
         }

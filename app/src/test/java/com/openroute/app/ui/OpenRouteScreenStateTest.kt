@@ -61,6 +61,9 @@ class OpenRouteScreenStateTest {
         assertFalse(screenState.routeList.items.single().showsNewBadge)
         assertEquals(RouteBadge.Recording, screenState.routeList.items.single().badge)
         assertEquals("12.3 km · 46 min · 2 puntos", screenState.routeList.items.single().subtitle)
+        assertEquals("1", screenState.routeList.hiddenRoutes?.countLabel)
+        assertEquals("Mostrar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
+        assertTrue(screenState.routeList.hiddenRoutes?.items?.isEmpty() == true)
         assertEquals(1, screenState.mapState.liveTrack.size)
         assertEquals("#0B6E4F", screenState.mapState.routes.single().color)
         assertNull(screenState.detailState)
@@ -271,6 +274,48 @@ class OpenRouteScreenStateTest {
 
         assertTrue(screenState.routeList.items.single().showsNewBadge)
         assertEquals(RouteBadge.Imported, screenState.routeList.items.single().badge)
+    }
+
+    @Test
+    fun `shows hidden routes section and delete dialog when expanded`() {
+        val hiddenRecordedRoute = RouteTrack(
+            id = "hidden-recorded",
+            name = "Hidden REC",
+            source = RouteSource.RECORDED,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 2_400.0,
+            points = listOf(
+                LatLngPoint(40.40, -3.70),
+                LatLngPoint(40.41, -3.69),
+            ),
+            isHidden = true,
+        )
+        val hiddenImportedRoute = RouteTrack(
+            id = "hidden-imported",
+            name = "Hidden GPX",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_010_000,
+            distanceMeters = 4_200.0,
+            points = listOf(
+                LatLngPoint(40.42, -3.68),
+                LatLngPoint(40.43, -3.67),
+            ),
+            isHidden = true,
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(hiddenRecordedRoute, hiddenImportedRoute),
+            showsHiddenRoutes = true,
+            deleteRouteId = hiddenImportedRoute.id,
+        ).toScreenState()
+
+        assertEquals("No hay rutas visibles. Puedes revisar las 2 ocultas.", screenState.routeList.emptyMessage)
+        assertEquals("Ocultar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
+        assertEquals(listOf("hidden-recorded", "hidden-imported"), screenState.routeList.hiddenRoutes?.items?.map { it.id })
+        assertEquals(RouteBadge.Recording, screenState.routeList.hiddenRoutes?.items?.first()?.badge)
+        assertEquals("Eliminar ruta oculta", screenState.routeList.hiddenRoutes?.deleteDialog?.title)
+        assertTrue(screenState.routeList.hiddenRoutes?.deleteDialog?.message?.contains("Hidden GPX") == true)
     }
 
     @Test

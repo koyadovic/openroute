@@ -60,9 +60,33 @@ data class RouteListItemState(
     val showsNewBadge: Boolean = false,
 )
 
+data class HiddenRouteListItemState(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val badge: RouteBadge,
+    val deleteLabel: String = "Eliminar",
+)
+
+data class HiddenRouteDeleteDialogState(
+    val title: String,
+    val message: String,
+    val confirmLabel: String = "Eliminar",
+    val dismissLabel: String = "Cancelar",
+)
+
+data class HiddenRoutesState(
+    val countLabel: String,
+    val toggleLabel: String,
+    val isExpanded: Boolean,
+    val items: List<HiddenRouteListItemState> = emptyList(),
+    val deleteDialog: HiddenRouteDeleteDialogState? = null,
+)
+
 data class RouteListState(
     val emptyMessage: String = "Todavía no hay rutas. Importa un GPX o empieza a grabar.",
     val items: List<RouteListItemState> = emptyList(),
+    val hiddenRoutes: HiddenRoutesState? = null,
 )
 
 data class RouteDetailState(
@@ -146,6 +170,7 @@ data class DownloadsBannerState(
 
 internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
     val visibleRoutes = visibleRoutes
+    val hiddenRoutes = hiddenRoutes
     val selectedRoute = selectedRoute
     val detailRoute = detailRoute
     val navigation3DRoute = navigation3DRoute
@@ -235,6 +260,11 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             canOpenDetail = selectedRoute != null,
         ),
         routeList = RouteListState(
+            emptyMessage = if (hiddenRoutes.isNotEmpty()) {
+                "No hay rutas visibles. Puedes revisar las ${hiddenRoutes.size} ocultas."
+            } else {
+                "Todavía no hay rutas. Importa un GPX o empieza a grabar."
+            },
             items = visibleRoutes.map { route ->
                 RouteListItemState(
                     id = route.id,
@@ -243,6 +273,41 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
                     badge = if (route.source == RouteSource.RECORDED) RouteBadge.Recording else RouteBadge.Imported,
                     isSelected = route.id == selectedRouteId,
                     showsNewBadge = route.source == RouteSource.IMPORTED_GPX && route.isNew,
+                )
+            },
+            hiddenRoutes = hiddenRoutes.takeIf { it.isNotEmpty() }?.let { routes ->
+                HiddenRoutesState(
+                    countLabel = "${routes.size}",
+                    toggleLabel = if (showsHiddenRoutes) {
+                        "Ocultar ocultas"
+                    } else {
+                        "Mostrar ocultas"
+                    },
+                    isExpanded = showsHiddenRoutes,
+                    items = if (showsHiddenRoutes) {
+                        routes.map { route ->
+                            HiddenRouteListItemState(
+                                id = route.id,
+                                title = route.name,
+                                subtitle = route.metricsSubtitle(),
+                                badge = if (route.source == RouteSource.RECORDED) {
+                                    RouteBadge.Recording
+                                } else {
+                                    RouteBadge.Imported
+                                },
+                            )
+                        }
+                    } else {
+                        emptyList()
+                    },
+                    deleteDialog = routePendingDeletion
+                        ?.takeIf(RouteTrack::isHidden)
+                        ?.let { route ->
+                            HiddenRouteDeleteDialogState(
+                                title = "Eliminar ruta oculta",
+                                message = "Se borrará \"${route.name}\" de OpenRoute.",
+                            )
+                        },
                 )
             },
         ),

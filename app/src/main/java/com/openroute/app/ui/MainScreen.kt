@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -77,6 +78,7 @@ fun MainRoute(viewModel: MainViewModel) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var downloadsAccessState by remember { mutableStateOf(context.resolveDownloadsAccessState()) }
+    var trackingSetupDialogState by remember { mutableStateOf<TrackingSetupDialogState?>(null) }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -92,6 +94,67 @@ fun MainRoute(viewModel: MainViewModel) {
     }
 
     val pendingLocationAction = remember { mutableStateOf<LocationAction?>(null) }
+    val startLocationAction = rememberUpdatedState(
+        newValue = { action: LocationAction ->
+            when (action) {
+                LocationAction.Record -> viewModel.startRecording(context)
+                LocationAction.Navigate -> viewModel.startNavigation(context)
+            }
+            pendingLocationAction.value = null
+        },
+    )
+    val attemptPendingLocationAction = rememberUpdatedState(
+        newValue = {
+            val pendingAction = pendingLocationAction.value ?: return@rememberUpdatedState
+            if (context.hasTrackingLocationPermission()) {
+                if (!context.hasTrackingBatteryExemption()) {
+                    viewModel.showMessage(
+                        "Para pantalla bloqueada conviene también Batería > Sin restricciones.",
+                    )
+                }
+                startLocationAction.value(pendingAction)
+            }
+        },
+    )
+    val promptBackgroundLocationAccess = rememberUpdatedState(
+        newValue = { action: LocationAction ->
+            pendingLocationAction.value = action
+            trackingSetupDialogState = TrackingSetupDialogState(
+                kind = TrackingSetupDialogKind.BackgroundLocation,
+                action = action,
+                title = "Falta \"Permitir siempre\"",
+                message = when (action) {
+                    LocationAction.Record ->
+                        "Para seguir grabando con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
+
+                    LocationAction.Navigate ->
+                        "Para seguir navegando con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
+                },
+                confirmLabel = if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+                    "Dar permiso"
+                } else {
+                    "Abrir ajustes"
+                },
+                dismissLabel = "Cancelar",
+            )
+        },
+    )
+    val maybePromptBatteryOptimization = rememberUpdatedState(
+        newValue = { action: LocationAction ->
+            if (context.hasTrackingBatteryExemption()) {
+                startLocationAction.value(action)
+            } else {
+                trackingSetupDialogState = TrackingSetupDialogState(
+                    kind = TrackingSetupDialogKind.BatteryOptimization,
+                    action = action,
+                    title = "Revisa la batería",
+                    message = "La app puede empezar ya, pero para que no se corte al bloquear la pantalla conviene quitar la optimización de batería. En Samsung: Batería > Sin restricciones.",
+                    confirmLabel = "Abrir batería",
+                    dismissLabel = "Continuar",
+                )
+            }
+        },
+    )
     var hasRequestedStartupLocation by rememberSaveable { mutableStateOf(false) }
     val refreshCurrentLocation = rememberUpdatedState(
         newValue = {
@@ -100,6 +163,18 @@ fun MainRoute(viewModel: MainViewModel) {
             }
         },
     )
+
+    val backgroundLocationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted || context.hasBackgroundLocationPermission()) {
+            attemptPendingLocationAction.value()
+        } else if (pendingLocationAction.value != null) {
+            viewModel.showMessage(
+                "Falta Ubicación > Permitir siempre. Sin ello la ruta puede quedarse anclada al último punto.",
+            )
+        }
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -110,23 +185,28 @@ fun MainRoute(viewModel: MainViewModel) {
         if (hasLocationPermission) {
             refreshCurrentLocation.value()
             when {
-                pendingLocationAction.value == LocationAction.Record && hasPreciseLocationPermission ->
-                    viewModel.startRecording(context)
+                pendingLocationAction.value != null && hasPreciseLocationPermission && context.hasBackgroundLocationPermission() ->
+                    attemptPendingLocationAction.value()
 
-                pendingLocationAction.value == LocationAction.Navigate && hasPreciseLocationPermission ->
-                    viewModel.startNavigation(context)
+                pendingLocationAction.value != null && hasPreciseLocationPermission ->
+                    pendingLocationAction.value?.let(promptBackgroundLocationAccess.value)
 
                 pendingLocationAction.value == LocationAction.Record ->
-                    viewModel.showMessage("Necesito ubicación precisa para grabar la ruta.")
+                    run {
+                        viewModel.showMessage("Necesito ubicación precisa para grabar la ruta.")
+                        pendingLocationAction.value = null
+                    }
 
                 pendingLocationAction.value == LocationAction.Navigate ->
-                    viewModel.showMessage("Necesito ubicación precisa para navegar la ruta.")
+                    run {
+                        viewModel.showMessage("Necesito ubicación precisa para navegar la ruta.")
+                        pendingLocationAction.value = null
+                    }
             }
         } else if (pendingLocationAction.value != null) {
             viewModel.showMessage("Faltan permisos de localización.")
+            pendingLocationAction.value = null
         }
-
-        pendingLocationAction.value = null
     }
 
     val downloadsPermissionLauncher = rememberLauncherForActivityResult(
@@ -164,6 +244,7 @@ fun MainRoute(viewModel: MainViewModel) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 refreshDownloadsSync.value()
                 refreshCurrentLocation.value()
+                attemptPendingLocationAction.value()
             }
         }
 
@@ -206,7 +287,13 @@ fun MainRoute(viewModel: MainViewModel) {
             } else {
                 context.withPreciseLocationPermission(
                     permissions = locationPermissions,
-                    onGranted = { viewModel.startRecording(context) },
+                    onGranted = {
+                        if (context.hasBackgroundLocationPermission()) {
+                            maybePromptBatteryOptimization.value(LocationAction.Record)
+                        } else {
+                            promptBackgroundLocationAccess.value(LocationAction.Record)
+                        }
+                    },
                     onMissingPermission = {
                         pendingLocationAction.value = LocationAction.Record
                         locationPermissionLauncher.launch(locationPermissions.toTypedArray())
@@ -225,6 +312,10 @@ fun MainRoute(viewModel: MainViewModel) {
             }
         },
         onHideSelectedClick = viewModel::hideSelectedRoute,
+        onToggleHiddenRoutesClick = viewModel::toggleHiddenRoutesVisibility,
+        onDeleteHiddenRouteClick = viewModel::requestDeleteRoute,
+        onConfirmDeleteHiddenRouteClick = viewModel::confirmDeleteRoute,
+        onDismissDeleteHiddenRouteClick = viewModel::dismissDeleteRoute,
         onOpenDetailClick = viewModel::openSelectedRouteDetail,
         onCloseDetailClick = viewModel::closeRouteDetail,
         onOpenRenameRouteClick = viewModel::openRenameRoute,
@@ -238,7 +329,13 @@ fun MainRoute(viewModel: MainViewModel) {
             } else {
                 context.withPreciseLocationPermission(
                     permissions = locationPermissions,
-                    onGranted = { viewModel.startNavigation(context) },
+                    onGranted = {
+                        if (context.hasBackgroundLocationPermission()) {
+                            maybePromptBatteryOptimization.value(LocationAction.Navigate)
+                        } else {
+                            promptBackgroundLocationAccess.value(LocationAction.Navigate)
+                        }
+                    },
                     onMissingPermission = {
                         pendingLocationAction.value = LocationAction.Navigate
                         locationPermissionLauncher.launch(locationPermissions.toTypedArray())
@@ -250,6 +347,40 @@ fun MainRoute(viewModel: MainViewModel) {
         onCloseNavigation3DClick = viewModel::closeNavigation3D,
         onRouteClick = viewModel::selectRoute,
     )
+
+    trackingSetupDialogState?.let { dialogState ->
+        TrackingSetupDialog(
+            state = dialogState,
+            onConfirm = {
+                when (dialogState.kind) {
+                    TrackingSetupDialogKind.BackgroundLocation -> {
+                        pendingLocationAction.value = dialogState.action
+                        context.requestBackgroundLocationAccess(
+                            launcher = backgroundLocationPermissionLauncher,
+                        )
+                    }
+
+                    TrackingSetupDialogKind.BatteryOptimization -> {
+                        pendingLocationAction.value = dialogState.action
+                        context.openTrackingBatterySettings()
+                    }
+                }
+                trackingSetupDialogState = null
+            },
+            onDismiss = {
+                when (dialogState.kind) {
+                    TrackingSetupDialogKind.BackgroundLocation -> {
+                        pendingLocationAction.value = null
+                    }
+
+                    TrackingSetupDialogKind.BatteryOptimization -> {
+                        startLocationAction.value(dialogState.action)
+                    }
+                }
+                trackingSetupDialogState = null
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -262,6 +393,10 @@ fun OpenRouteScreen(
     onTrackClick: () -> Unit,
     onEnableDownloadsAutoImport: () -> Unit,
     onHideSelectedClick: () -> Unit,
+    onToggleHiddenRoutesClick: () -> Unit,
+    onDeleteHiddenRouteClick: (String) -> Unit,
+    onConfirmDeleteHiddenRouteClick: () -> Unit,
+    onDismissDeleteHiddenRouteClick: () -> Unit,
     onOpenDetailClick: () -> Unit,
     onCloseDetailClick: () -> Unit,
     onOpenRenameRouteClick: () -> Unit,
@@ -305,6 +440,10 @@ fun OpenRouteScreen(
                 onTrackClick = onTrackClick,
                 onEnableDownloadsAutoImport = onEnableDownloadsAutoImport,
                 onHideSelectedClick = onHideSelectedClick,
+                onToggleHiddenRoutesClick = onToggleHiddenRoutesClick,
+                onDeleteHiddenRouteClick = onDeleteHiddenRouteClick,
+                onConfirmDeleteHiddenRouteClick = onConfirmDeleteHiddenRouteClick,
+                onDismissDeleteHiddenRouteClick = onDismissDeleteHiddenRouteClick,
                 onOpenDetailClick = onOpenDetailClick,
                 onRouteClick = onRouteClick,
                 modifier = Modifier
@@ -353,6 +492,10 @@ private fun BrowseScreen(
     onTrackClick: () -> Unit,
     onEnableDownloadsAutoImport: () -> Unit,
     onHideSelectedClick: () -> Unit,
+    onToggleHiddenRoutesClick: () -> Unit,
+    onDeleteHiddenRouteClick: (String) -> Unit,
+    onConfirmDeleteHiddenRouteClick: () -> Unit,
+    onDismissDeleteHiddenRouteClick: () -> Unit,
     onOpenDetailClick: () -> Unit,
     onRouteClick: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -408,21 +551,25 @@ private fun BrowseScreen(
                 .weight(0.9f),
             shape = RoundedCornerShape(24.dp),
         ) {
-            if (state.routeList.items.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = state.routeList.emptyMessage,
-                        modifier = Modifier.padding(24.dp),
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (state.routeList.items.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = state.routeList.emptyMessage,
+                                modifier = Modifier.padding(horizontal = 24.dp),
+                            )
+                        }
+                    }
+                } else {
                     items(state.routeList.items, key = { it.id }) { item ->
                         RouteRow(
                             state = item,
@@ -430,8 +577,34 @@ private fun BrowseScreen(
                         )
                     }
                 }
+
+                state.routeList.hiddenRoutes?.let { hiddenState ->
+                    item {
+                        HiddenRoutesHeader(
+                            state = hiddenState,
+                            onToggleClick = onToggleHiddenRoutesClick,
+                        )
+                    }
+
+                    if (hiddenState.isExpanded) {
+                        items(hiddenState.items, key = { it.id }) { item ->
+                            HiddenRouteRow(
+                                state = item,
+                                onDeleteClick = { onDeleteHiddenRouteClick(item.id) },
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+
+    state.routeList.hiddenRoutes?.deleteDialog?.let { dialogState ->
+        DeleteRouteDialog(
+            state = dialogState,
+            onConfirm = onConfirmDeleteHiddenRouteClick,
+            onDismiss = onDismissDeleteHiddenRouteClick,
+        )
     }
 }
 
@@ -911,6 +1084,52 @@ private fun RenameRouteDialog(
 }
 
 @Composable
+private fun TrackingSetupDialog(
+    state: TrackingSetupDialogState,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(state.title) },
+        text = { Text(state.message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(state.confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(state.dismissLabel)
+            }
+        },
+    )
+}
+
+@Composable
+private fun DeleteRouteDialog(
+    state: HiddenRouteDeleteDialogState,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(state.title) },
+        text = { Text(state.message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(state.confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(state.dismissLabel)
+            }
+        },
+    )
+}
+
+@Composable
 private fun SummaryChip(label: String, value: String, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
@@ -930,6 +1149,45 @@ private fun SummaryChip(label: String, value: String, modifier: Modifier = Modif
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
+        }
+    }
+}
+
+@Composable
+private fun HiddenRoutesHeader(
+    state: HiddenRoutesState,
+    onToggleClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Rutas ocultas",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "${state.countLabel} guardadas fuera de la vista principal",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            OutlinedButton(onClick = onToggleClick) {
+                Text(state.toggleLabel)
+            }
         }
     }
 }
@@ -997,6 +1255,56 @@ private fun RouteRow(
     }
 }
 
+@Composable
+private fun HiddenRouteRow(
+    state: HiddenRouteListItemState,
+    onDeleteClick: () -> Unit,
+) {
+    val badgeColor = when (state.badge) {
+        RouteBadge.Recording -> Color(0xFFD95D39)
+        RouteBadge.Imported -> Color(0xFF1D3557)
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(badgeColor, RoundedCornerShape(999.dp)),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = state.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = state.subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            OutlinedButton(onClick = onDeleteClick) {
+                Text(state.deleteLabel)
+            }
+        }
+    }
+}
+
 private enum class DownloadsAccessState {
     Granted,
     NeedsPermission,
@@ -1007,6 +1315,20 @@ private enum class LocationAction {
     Record,
     Navigate,
 }
+
+private enum class TrackingSetupDialogKind {
+    BackgroundLocation,
+    BatteryOptimization,
+}
+
+private data class TrackingSetupDialogState(
+    val kind: TrackingSetupDialogKind,
+    val action: LocationAction,
+    val title: String,
+    val message: String,
+    val confirmLabel: String,
+    val dismissLabel: String,
+)
 
 private fun DownloadsAccessState.toPresentation(): DownloadsAccessPresentation {
     return when (this) {
@@ -1064,6 +1386,37 @@ private fun Context.hasPreciseLocationPermission(): Boolean {
     ) == PackageManager.PERMISSION_GRANTED
 }
 
+private fun Context.hasBackgroundLocationPermission(): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+        ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun Context.hasTrackingLocationPermission(): Boolean {
+    return hasPreciseLocationPermission() && hasBackgroundLocationPermission()
+}
+
+private fun Context.hasTrackingBatteryExemption(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+        return true
+    }
+
+    val powerManager = getSystemService(PowerManager::class.java) ?: return true
+    return powerManager.isIgnoringBatteryOptimizations(packageName)
+}
+
+private fun Context.requestBackgroundLocationAccess(
+    launcher: androidx.activity.result.ActivityResultLauncher<String>,
+) {
+    if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
+        launcher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    } else {
+        openAppDetailsSettings()
+    }
+}
+
 private fun Context.openManageAllFilesAccessSettings() {
     val packageUri = Uri.parse("package:$packageName")
     val appIntent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri)
@@ -1082,6 +1435,38 @@ private fun Context.openManageAllFilesAccessSettings() {
             if (error !is ActivityNotFoundException) {
                 throw error
             }
+        }
+    }
+}
+
+private fun Context.openAppDetailsSettings() {
+    val packageUri = Uri.parse("package:$packageName")
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    startActivity(intent)
+}
+
+private fun Context.openTrackingBatterySettings() {
+    val packageUri = Uri.parse("package:$packageName")
+    val requestIgnoreIntent = Intent(
+        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        packageUri,
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    val batteryOptimizationSettingsIntent = Intent(
+        Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS,
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    val openedRequest = runCatching {
+        startActivity(requestIgnoreIntent)
+    }.isSuccess
+
+    if (!openedRequest) {
+        val openedBatterySettings = runCatching {
+            startActivity(batteryOptimizationSettingsIntent)
+        }.isSuccess
+
+        if (!openedBatterySettings) {
+            openAppDetailsSettings()
         }
     }
 }

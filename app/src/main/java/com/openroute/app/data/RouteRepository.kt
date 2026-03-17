@@ -92,6 +92,14 @@ class RouteRepository(context: Context) {
         updatedRoute
     }
 
+    suspend fun deleteRoute(routeId: String): RouteTrack? = withContext(Dispatchers.IO) {
+        val currentRoutes = readRoutesInternal()
+        val routeToDelete = currentRoutes.firstOrNull { it.id == routeId } ?: return@withContext null
+        val updatedRoutes = currentRoutes.filterNot { it.id == routeId }
+        writeRoutesInternal(updatedRoutes)
+        routeToDelete
+    }
+
     private fun readRoutesInternal(): List<RouteTrack> {
         if (!storageFile.exists()) {
             return emptyList()
