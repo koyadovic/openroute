@@ -58,6 +58,15 @@ data class MapRenderState(
 )
 
 @Serializable
+data class Navigation3DRenderState(
+    val routePoints: List<LatLngPoint> = emptyList(),
+    val visitedPoints: List<LatLngPoint> = emptyList(),
+    val currentLocation: LatLngPoint? = null,
+    val headingDegrees: Double = 0.0,
+    val isOffRoute: Boolean = false,
+)
+
+@Serializable
 data class MapFocusState(
     val routeId: String? = null,
     val includeCurrentLocation: Boolean = false,

@@ -120,7 +120,9 @@ class OpenRouteScreenStateTest {
         assertEquals("5.5 km", screenState.detailState?.navigationState?.remainingLabel)
         assertEquals("20 min", screenState.detailState?.navigationState?.etaLabel)
         assertEquals("12 m", screenState.detailState?.navigationState?.distanceToRouteLabel)
-        assertEquals("Detener navegación", screenState.detailState?.navigationState?.actionLabel)
+        assertFalse(screenState.detailState?.navigationState?.showsOffRouteAlert == true)
+        assertEquals("Abrir guía 3D", screenState.detailState?.navigationState?.actionLabel)
+        assertEquals("Detener navegación", screenState.detailState?.navigationState?.secondaryActionLabel)
     }
 
     @Test
@@ -239,5 +241,96 @@ class OpenRouteScreenStateTest {
 
         assertTrue(screenState.routeList.items.single().showsNewBadge)
         assertEquals(RouteBadge.Imported, screenState.routeList.items.single().badge)
+    }
+
+    @Test
+    fun `marks navigation card as off route when distance reaches alert threshold`() {
+        val route = RouteTrack(
+            id = "route-offroute",
+            name = "Detour",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 8_000.0,
+            points = listOf(
+                LatLngPoint(40.4, -3.7),
+                LatLngPoint(40.41, -3.69),
+            ),
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(route),
+            selectedRouteId = route.id,
+            detailRouteId = route.id,
+            navigationState = NavigationState(
+                isNavigating = true,
+                route = route,
+                currentLocation = LatLngPoint(40.412, -3.688),
+                progress = com.openroute.app.data.RouteNavigationProgress(
+                    nearestRoutePointIndex = 1,
+                    completedDistanceMeters = 1_000.0,
+                    remainingDistanceMeters = 7_000.0,
+                    completionRatio = 0.125,
+                    distanceToRouteMeters = 50.0,
+                    estimatedRemainingSeconds = 1_800L,
+                    currentSpeedMetersPerSecond = 3.5,
+                ),
+            ),
+        ).toScreenState()
+
+        assertEquals("Fuera de ruta (50 m)", screenState.detailState?.navigationState?.statusLabel)
+        assertTrue(screenState.detailState?.navigationState?.showsOffRouteAlert == true)
+    }
+
+    @Test
+    fun `maps active navigation into dedicated 3d screen state`() {
+        val route = RouteTrack(
+            id = "route-3d",
+            name = "3D Ride",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 8_500.0,
+            points = listOf(
+                LatLngPoint(40.4000, -3.7000),
+                LatLngPoint(40.4010, -3.6995),
+                LatLngPoint(40.4020, -3.6990),
+                LatLngPoint(40.4030, -3.6985),
+            ),
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(route),
+            selectedRouteId = route.id,
+            detailRouteId = route.id,
+            navigation3DRouteId = route.id,
+            navigationState = NavigationState(
+                isNavigating = true,
+                route = route,
+                currentLocation = LatLngPoint(40.4012, -3.6994),
+                visitedPoints = listOf(
+                    LatLngPoint(40.4002, -3.6999),
+                    LatLngPoint(40.4008, -3.6996),
+                ),
+                progress = com.openroute.app.data.RouteNavigationProgress(
+                    nearestRoutePointIndex = 1,
+                    completedDistanceMeters = 1_250.0,
+                    remainingDistanceMeters = 7_250.0,
+                    completionRatio = 0.147,
+                    distanceToRouteMeters = 14.0,
+                    estimatedRemainingSeconds = 1_500L,
+                    currentSpeedMetersPerSecond = 4.2,
+                    displayLocation = LatLngPoint(40.4011, -3.69945),
+                    isLocationSnappedToRoute = true,
+                ),
+            ),
+        ).toScreenState()
+
+        assertEquals(OpenRouteScreenMode.Navigation3D, screenState.mode)
+        assertEquals("3D Ride", screenState.navigation3DState?.title)
+        assertEquals("Guía 3D aproximada", screenState.navigation3DState?.subtitle)
+        assertEquals("15%", screenState.navigation3DState?.progressLabel)
+        assertTrue((screenState.navigation3DState?.renderState?.routePoints?.size ?: 0) >= 2)
+        assertEquals(2, screenState.navigation3DState?.renderState?.visitedPoints?.size)
     }
 }

@@ -3,14 +3,17 @@ package com.openroute.app.ui
 import com.openroute.app.data.MapRenderState
 import com.openroute.app.data.MapRouteOverlay
 import com.openroute.app.data.MapFocusState
+import com.openroute.app.data.Navigation3DRenderState
 import com.openroute.app.data.RouteNavigationProgress
 import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
 import com.openroute.app.data.effectiveDurationMillis
+import kotlin.math.roundToInt
 
 enum class OpenRouteScreenMode {
     Browse,
     Detail,
+    Navigation3D,
 }
 
 data class HeaderState(
@@ -77,11 +80,28 @@ data class RouteDetailState(
 data class RouteDetailNavigationState(
     val isNavigating: Boolean = false,
     val actionLabel: String = "Iniciar navegación",
+    val secondaryActionLabel: String? = null,
     val statusLabel: String = "Navegación inactiva",
     val progressLabel: String = "0%",
     val remainingLabel: String = "-",
     val etaLabel: String = "-",
     val distanceToRouteLabel: String = "-",
+    val showsOffRouteAlert: Boolean = false,
+)
+
+data class Navigation3DState(
+    val routeId: String,
+    val title: String,
+    val subtitle: String,
+    val backLabel: String = "Volver al detalle",
+    val stopLabel: String = "Detener navegación",
+    val statusLabel: String,
+    val progressLabel: String,
+    val remainingLabel: String,
+    val etaLabel: String,
+    val distanceToRouteLabel: String,
+    val showsOffRouteAlert: Boolean = false,
+    val renderState: Navigation3DRenderState = Navigation3DRenderState(),
 )
 
 data class OpenRouteScreenState(
@@ -95,6 +115,7 @@ data class OpenRouteScreenState(
     val browseAction: BrowseActionState = BrowseActionState(),
     val routeList: RouteListState = RouteListState(),
     val detailState: RouteDetailState? = null,
+    val navigation3DState: Navigation3DState? = null,
     val snackbarMessage: String? = null,
 )
 
@@ -115,6 +136,7 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
     val visibleRoutes = visibleRoutes
     val selectedRoute = selectedRoute
     val detailRoute = detailRoute
+    val navigation3DRoute = navigation3DRoute
     val effectiveCurrentLocation = navigationState.currentLocation ?: currentLocation
     val effectiveLiveTrack = if (navigationState.isNavigating) navigationState.visitedPoints else liveTrack
     val mapRoutes = if (detailRoute != null) {
@@ -140,16 +162,35 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
         selectedRoute != null -> MapFocusState(routeId = selectedRoute.id)
         else -> MapFocusState()
     }
+    val navigationProgress = navigation3DRoute?.let { route ->
+        navigationState.progressFor(route.id)
+    }
+    val navigation3DState = navigation3DRoute
+        ?.takeIf { navigationState.isActiveFor(it.id) }
+        ?.toNavigation3DState(
+            progress = navigationProgress,
+            currentLocation = navigationState.currentLocation,
+            visitedPoints = navigationState.visitedPoints,
+        )
 
     return OpenRouteScreenState(
-        mode = if (detailRoute != null) OpenRouteScreenMode.Detail else OpenRouteScreenMode.Browse,
-        header = if (detailRoute != null) {
-            HeaderState(
+        mode = when {
+            navigation3DState != null -> OpenRouteScreenMode.Navigation3D
+            detailRoute != null -> OpenRouteScreenMode.Detail
+            else -> OpenRouteScreenMode.Browse
+        },
+        header = when {
+            navigation3DState != null -> HeaderState(
+                title = navigation3DState.title,
+                subtitle = navigation3DState.subtitle,
+            )
+
+            detailRoute != null -> HeaderState(
                 title = detailRoute.name,
                 subtitle = detailRoute.metricsSubtitle(),
             )
-        } else {
-            HeaderState()
+
+            else -> HeaderState()
         },
         actionBar = ActionBarState(
             isImportEnabled = !isImporting,
@@ -198,6 +239,7 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             isNavigating = navigationState.isActiveFor(detailRoute.id),
             progress = navigationState.progressFor(detailRoute.id),
         ),
+        navigation3DState = navigation3DState,
         snackbarMessage = message,
     )
 }
@@ -244,17 +286,51 @@ private fun RouteTrack.toDetailState(
         fileLabel = originalFileName,
         navigationState = RouteDetailNavigationState(
             isNavigating = isNavigating,
-            actionLabel = if (isNavigating) "Detener navegación" else "Iniciar navegación",
+            actionLabel = if (isNavigating) "Abrir guía 3D" else "Iniciar navegación",
+            secondaryActionLabel = if (isNavigating) "Detener navegación" else null,
             statusLabel = when {
                 isNavigating && progress == null -> "Esperando posición..."
                 progress == null -> "Navegación inactiva"
-                progress.distanceToRouteMeters > 40 -> "Fuera de ruta (${progress.distanceToRouteMeters.toDistanceLabel()})"
+                progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->
+                    "Fuera de ruta (${progress.distanceToRouteMeters.toDistanceLabel()})"
                 else -> "Siguiendo ruta"
             },
             progressLabel = progress?.completionRatio?.toPercentLabel() ?: "0%",
             remainingLabel = progress?.remainingDistanceMeters.toDistanceLabel(),
             etaLabel = progress?.estimatedRemainingSeconds.toEtaLabel(),
             distanceToRouteLabel = progress?.distanceToRouteMeters.toDistanceLabel(),
+            showsOffRouteAlert = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
+        ),
+    )
+}
+
+private fun RouteTrack.toNavigation3DState(
+    progress: RouteNavigationProgress?,
+    currentLocation: com.openroute.app.data.LatLngPoint?,
+    visitedPoints: List<com.openroute.app.data.LatLngPoint>,
+): Navigation3DState {
+    val nearestIndex = progress?.nearestRoutePointIndex ?: 0
+    return Navigation3DState(
+        routeId = id,
+        title = name,
+        subtitle = "Guía 3D aproximada",
+        statusLabel = when {
+            progress == null -> "Esperando posición..."
+            progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->
+                "Fuera de ruta (${progress.distanceToRouteMeters.toDistanceLabel()})"
+            else -> "Siguiendo ruta"
+        },
+        progressLabel = progress?.completionRatio?.toPercentLabel() ?: "0%",
+        remainingLabel = progress?.remainingDistanceMeters.toDistanceLabel(),
+        etaLabel = progress?.estimatedRemainingSeconds.toEtaLabel(),
+        distanceToRouteLabel = progress?.distanceToRouteMeters.toDistanceLabel(),
+        showsOffRouteAlert = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
+        renderState = Navigation3DRenderState(
+            routePoints = routeWindowAround(nearestIndex),
+            visitedPoints = visitedPoints.takeLast(NAVIGATION_3D_VISITED_POINTS_WINDOW),
+            currentLocation = currentLocation,
+            headingDegrees = headingDegreesAround(nearestIndex),
+            isOffRoute = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
         ),
     )
 }
@@ -279,6 +355,31 @@ private fun RouteTrack.metricsSubtitle(): String {
         effectiveDurationMillis?.let { add(it.toDurationLabel()) }
         add("${points.size} puntos")
     }.joinToString(" · ")
+}
+
+private fun RouteTrack.routeWindowAround(nearestIndex: Int): List<com.openroute.app.data.LatLngPoint> {
+    if (points.isEmpty()) {
+        return emptyList()
+    }
+
+    val startIndex = (nearestIndex - NAVIGATION_3D_POINTS_BEHIND).coerceAtLeast(0)
+    val endIndex = (nearestIndex + NAVIGATION_3D_POINTS_AHEAD).coerceAtMost(points.lastIndex)
+    return points.subList(startIndex, endIndex + 1)
+}
+
+private fun RouteTrack.headingDegreesAround(nearestIndex: Int): Double {
+    if (points.size < 2) {
+        return 0.0
+    }
+
+    val fromIndex = (nearestIndex - 1).coerceAtLeast(0)
+    val toIndex = (nearestIndex + 1).coerceAtMost(points.lastIndex)
+    val from = points[fromIndex]
+    val to = points[toIndex]
+
+    val latitudeDelta = to.latitude - from.latitude
+    val longitudeDelta = to.longitude - from.longitude
+    return Math.toDegrees(kotlin.math.atan2(longitudeDelta, latitudeDelta))
 }
 
 internal fun Double?.toDistanceLabel(): String {
@@ -306,7 +407,7 @@ internal fun Long?.toDurationLabel(): String {
 }
 
 private fun Double.toPercentLabel(): String {
-    return "${(this * 100).toInt().coerceIn(0, 100)}%"
+    return "${(this * 100).roundToInt().coerceIn(0, 100)}%"
 }
 
 private fun Long?.toEtaLabel(): String {
@@ -321,3 +422,8 @@ private fun Long?.toEtaLabel(): String {
         "${minutes} min"
     }
 }
+
+private const val OFF_ROUTE_ALERT_DISTANCE_METERS = 50.0
+private const val NAVIGATION_3D_POINTS_BEHIND = 8
+private const val NAVIGATION_3D_POINTS_AHEAD = 28
+private const val NAVIGATION_3D_VISITED_POINTS_WINDOW = 32

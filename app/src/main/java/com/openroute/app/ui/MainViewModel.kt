@@ -34,6 +34,7 @@ internal data class OpenRouteUiState(
     val routes: List<RouteTrack> = emptyList(),
     val selectedRouteId: String? = null,
     val detailRouteId: String? = null,
+    val navigation3DRouteId: String? = null,
     val liveTrack: List<com.openroute.app.data.LatLngPoint> = emptyList(),
     val currentLocation: com.openroute.app.data.LatLngPoint? = null,
     val navigationState: NavigationState = NavigationState(),
@@ -49,6 +50,9 @@ internal data class OpenRouteUiState(
 
     val detailRoute: RouteTrack?
         get() = visibleRoutes.firstOrNull { it.id == detailRouteId }
+
+    val navigation3DRoute: RouteTrack?
+        get() = visibleRoutes.firstOrNull { it.id == navigation3DRouteId }
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -99,6 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         } else {
                             emptyList()
                         },
+                        navigation3DRouteId = if (navigationState.isNavigating) current.navigation3DRouteId else null,
                         currentLocation = navigationState.currentLocation
                             ?: if (current.isTracking) {
                                 TrackingSessionStore.state.value.currentLocation
@@ -133,6 +138,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     selectedRouteId = current.resolveNextSelectedRouteId(routes),
                     detailRouteId = current.detailRouteId
                         ?.takeIf { detailId -> routes.any { route -> route.id == detailId && !route.isHidden } },
+                    navigation3DRouteId = current.navigation3DRouteId
+                        ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
                 )
             }
         }
@@ -161,6 +168,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         routes = listOf(route) + current.routes.filterNot { it.id == route.id },
                         selectedRouteId = route.id,
                         detailRouteId = current.detailRouteId,
+                        navigation3DRouteId = current.navigation3DRouteId,
                         message = "Importado ${route.name}",
                     )
                 }
@@ -239,6 +247,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     selectedRouteId = current.resolveSelectionAfterImports(routes, importResult.importedRoutes),
                     detailRouteId = current.detailRouteId
                         ?.takeIf { detailId -> routes.any { route -> route.id == detailId && !route.isHidden } },
+                    navigation3DRouteId = current.navigation3DRouteId
+                        ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
                     message = importResult.toMessage(),
                 )
             }
@@ -273,6 +283,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     selectedRouteId = current.resolveNextSelectedRouteId(routes),
                     detailRouteId = current.detailRouteId
                         ?.takeIf { detailId -> detailId != routeId && routes.any { route -> route.id == detailId && !route.isHidden } },
+                    navigation3DRouteId = current.navigation3DRouteId
+                        ?.takeIf { sceneId -> sceneId != routeId && routes.any { route -> route.id == sceneId && !route.isHidden } },
                     message = "Ruta oculta: ${hiddenRoute.name}",
                 )
             }
@@ -286,12 +298,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.copy(
                 selectedRouteId = route.id,
                 detailRouteId = route.id,
+                navigation3DRouteId = route.id,
             )
         }
         NavigationService.start(context)
     }
 
+    fun openNavigation3D() {
+        val routeId = _uiState.value.navigationState.route?.id ?: _uiState.value.detailRoute?.id ?: return
+        _uiState.update { current ->
+            current.copy(
+                detailRouteId = routeId,
+                navigation3DRouteId = routeId,
+            )
+        }
+    }
+
+    fun closeNavigation3D() {
+        _uiState.update { current ->
+            current.copy(navigation3DRouteId = null)
+        }
+    }
+
     fun stopNavigation(context: Context) {
+        _uiState.update { current ->
+            current.copy(navigation3DRouteId = null)
+        }
         NavigationService.stop(context)
     }
 

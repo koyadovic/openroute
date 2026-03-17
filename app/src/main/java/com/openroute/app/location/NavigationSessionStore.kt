@@ -33,15 +33,17 @@ object NavigationSessionStore {
             if (!current.isNavigating || route == null) {
                 current
             } else {
-                val visitedPoints = (current.visitedPoints + point).takeLast(MAX_VISITED_POINTS)
-                current.copy(
+                val progress = RouteNavigationEngine.calculate(
+                    route = route,
                     currentLocation = point,
+                    recentLocations = current.visitedPoints,
+                )
+                val displayLocation = progress.displayLocation ?: point
+                val visitedPoints = (current.visitedPoints + displayLocation).takeLast(MAX_VISITED_POINTS)
+                current.copy(
+                    currentLocation = displayLocation,
                     visitedPoints = visitedPoints,
-                    progress = RouteNavigationEngine.calculate(
-                        route = route,
-                        currentLocation = point,
-                        recentLocations = visitedPoints,
-                    ),
+                    progress = progress,
                 )
             }
         }
@@ -53,4 +55,3 @@ object NavigationSessionStore {
 
     private const val MAX_VISITED_POINTS = 500
 }
-

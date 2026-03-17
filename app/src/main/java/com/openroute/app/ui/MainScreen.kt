@@ -34,6 +34,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -183,8 +184,12 @@ fun MainRoute(viewModel: MainViewModel) {
         }
     }
 
-    BackHandler(enabled = screenState.mode == OpenRouteScreenMode.Detail) {
-        viewModel.closeRouteDetail()
+    BackHandler(enabled = screenState.mode != OpenRouteScreenMode.Browse) {
+        when (screenState.mode) {
+            OpenRouteScreenMode.Detail -> viewModel.closeRouteDetail()
+            OpenRouteScreenMode.Navigation3D -> viewModel.closeNavigation3D()
+            OpenRouteScreenMode.Browse -> Unit
+        }
     }
 
     OpenRouteScreen(
@@ -222,7 +227,7 @@ fun MainRoute(viewModel: MainViewModel) {
         onNavigationClick = {
             val isNavigating = screenState.detailState?.navigationState?.isNavigating == true
             if (isNavigating) {
-                viewModel.stopNavigation(context)
+                viewModel.openNavigation3D()
             } else {
                 context.withPreciseLocationPermission(
                     permissions = locationPermissions,
@@ -234,6 +239,8 @@ fun MainRoute(viewModel: MainViewModel) {
                 )
             }
         },
+        onStopNavigationClick = { viewModel.stopNavigation(context) },
+        onCloseNavigation3DClick = viewModel::closeNavigation3D,
         onRouteClick = viewModel::selectRoute,
     )
 }
@@ -251,6 +258,8 @@ fun OpenRouteScreen(
     onOpenDetailClick: () -> Unit,
     onCloseDetailClick: () -> Unit,
     onNavigationClick: () -> Unit,
+    onStopNavigationClick: () -> Unit,
+    onCloseNavigation3DClick: () -> Unit,
     onRouteClick: (String) -> Unit,
 ) {
     Scaffold(
@@ -299,6 +308,18 @@ fun OpenRouteScreen(
                 mapState = state.mapState,
                 onCloseDetailClick = onCloseDetailClick,
                 onNavigationClick = onNavigationClick,
+                onStopNavigationClick = onStopNavigationClick,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(paddingValues)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+
+            OpenRouteScreenMode.Navigation3D -> Navigation3DScreen(
+                state = state.navigation3DState,
+                onCloseClick = onCloseNavigation3DClick,
+                onStopNavigationClick = onStopNavigationClick,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
@@ -405,6 +426,7 @@ private fun RouteDetailScreen(
     mapState: com.openroute.app.data.MapRenderState,
     onCloseDetailClick: () -> Unit,
     onNavigationClick: () -> Unit,
+    onStopNavigationClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (state == null) {
@@ -497,7 +519,110 @@ private fun RouteDetailScreen(
         NavigationCard(
             state = state.navigationState,
             onNavigationClick = onNavigationClick,
+            onStopNavigationClick = onStopNavigationClick,
         )
+    }
+}
+
+@Composable
+private fun Navigation3DScreen(
+    state: Navigation3DState?,
+    onCloseClick: () -> Unit,
+    onStopNavigationClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (state == null) {
+        return
+    }
+
+    val backgroundColor = if (state.showsOffRouteAlert) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+    val statusColor = if (state.showsOffRouteAlert) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+
+    Column(
+        modifier = modifier
+            .background(backgroundColor)
+            .padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            OutlinedButton(onClick = onCloseClick) {
+                Text(state.backLabel)
+            }
+            Button(onClick = onStopNavigationClick) {
+                Text(state.stopLabel)
+            }
+        }
+
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            shape = RoundedCornerShape(28.dp),
+        ) {
+            Navigation3DCanvas(
+                state = state.renderState,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = state.statusLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = statusColor,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    SummaryChip(
+                        label = "Progress",
+                        value = state.progressLabel,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SummaryChip(
+                        label = "Remaining",
+                        value = state.remainingLabel,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    SummaryChip(
+                        label = "ETA",
+                        value = state.etaLabel,
+                        modifier = Modifier.weight(1f),
+                    )
+                    SummaryChip(
+                        label = "To Route",
+                        value = state.distanceToRouteLabel,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -627,10 +752,18 @@ private fun BrowseActions(
 private fun NavigationCard(
     state: RouteDetailNavigationState,
     onNavigationClick: () -> Unit,
+    onStopNavigationClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (state.showsOffRouteAlert) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        ),
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -644,7 +777,11 @@ private fun NavigationCard(
             Text(
                 text = state.statusLabel,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (state.showsOffRouteAlert) {
+                    MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -676,11 +813,31 @@ private fun NavigationCard(
                     modifier = Modifier.weight(1f),
                 )
             }
-            Button(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onNavigationClick,
-            ) {
-                Text(state.actionLabel)
+            if (state.secondaryActionLabel == null) {
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onNavigationClick,
+                ) {
+                    Text(state.actionLabel)
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        onClick = onStopNavigationClick,
+                    ) {
+                        Text(state.secondaryActionLabel)
+                    }
+                    Button(
+                        modifier = Modifier.weight(1f),
+                        onClick = onNavigationClick,
+                    ) {
+                        Text(state.actionLabel)
+                    }
+                }
             }
         }
     }
