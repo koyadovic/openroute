@@ -1,5 +1,6 @@
 package com.openroute.app.location
 
+import android.location.LocationManager
 import com.openroute.app.data.LatLngPoint
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -7,17 +8,20 @@ import org.junit.Test
 
 class LocationSamplePolicyTest {
     @Test
-    fun `accepts a fresh accurate first sample`() {
+    fun `accepts a fresh accurate gps sample`() {
         val sample = sample(
             latitude = 40.4168,
             longitude = -3.7038,
             capturedAtMillis = 10_000L,
             receivedAtMillis = 12_000L,
             accuracyMeters = 8f,
+            provider = LocationManager.GPS_PROVIDER,
         )
 
-        assertTrue(LocationSamplePolicy.isUsable(sample))
-        assertTrue(LocationSamplePolicy.shouldAppend(previousPoint = null, sample = sample))
+        val assessment = LocationSamplePolicy.assess(sample)
+
+        assertTrue(assessment.isAccepted)
+        assertTrue(assessment.qualityScore > 0.5)
     }
 
     @Test
@@ -31,7 +35,6 @@ class LocationSamplePolicyTest {
         )
 
         assertFalse(LocationSamplePolicy.isUsable(sample))
-        assertFalse(LocationSamplePolicy.shouldAppend(previousPoint = null, sample = sample))
     }
 
     @Test
@@ -48,39 +51,78 @@ class LocationSamplePolicyTest {
     }
 
     @Test
-    fun `rejects tiny movement that only adds GPS jitter`() {
+    fun `rejects implausible jump against recent history`() {
         val previousPoint = LatLngPoint(
             latitude = 40.4168,
             longitude = -3.7038,
             timestampMillis = 10_000L,
         )
-        val sample = sample(
-            latitude = 40.41681,
+        val previousSample = sample(
+            latitude = 40.4168,
+            longitude = -3.7038,
+            capturedAtMillis = 10_000L,
+            receivedAtMillis = 10_500L,
+            accuracyMeters = 5f,
+        )
+        val outlier = sample(
+            latitude = 40.4308,
             longitude = -3.7038,
             capturedAtMillis = 14_000L,
-            receivedAtMillis = 14_500L,
-            accuracyMeters = 6f,
-        )
-
-        assertFalse(LocationSamplePolicy.shouldAppend(previousPoint, sample))
-    }
-
-    @Test
-    fun `rejects unrealistic jumps between consecutive points`() {
-        val previousPoint = LatLngPoint(
-            latitude = 40.4168,
-            longitude = -3.7038,
-            timestampMillis = 10_000L,
-        )
-        val sample = sample(
-            latitude = 40.4268,
-            longitude = -3.7038,
-            capturedAtMillis = 20_000L,
-            receivedAtMillis = 20_500L,
+            receivedAtMillis = 14_200L,
             accuracyMeters = 5f,
         )
 
-        assertFalse(LocationSamplePolicy.shouldAppend(previousPoint, sample))
+        assertFalse(
+            LocationSamplePolicy.isPlausibleAgainstHistory(
+                sample = outlier,
+                previousAcceptedPoint = previousPoint,
+                previousAcceptedSample = previousSample,
+                predictedPoint = previousPoint,
+            ),
+        )
+    }
+
+    @Test
+    fun `avoids appending tiny movement as recorded point`() {
+        val previousPoint = LatLngPoint(
+            latitude = 40.4168,
+            longitude = -3.7038,
+            timestampMillis = 10_000L,
+        )
+        val candidatePoint = LatLngPoint(
+            latitude = 40.41681,
+            longitude = -3.7038,
+            timestampMillis = 12_000L,
+        )
+
+        assertFalse(
+            LocationSamplePolicy.shouldAppendTrackPoint(
+                previousPoint = previousPoint,
+                candidatePoint = candidatePoint,
+                qualityScore = 0.9,
+            ),
+        )
+    }
+
+    @Test
+    fun `appends visited point on meaningful movement`() {
+        val previousPoint = LatLngPoint(
+            latitude = 40.4168,
+            longitude = -3.7038,
+            timestampMillis = 10_000L,
+        )
+        val candidatePoint = LatLngPoint(
+            latitude = 40.41682,
+            longitude = -3.7038,
+            timestampMillis = 11_500L,
+        )
+
+        assertTrue(
+            LocationSamplePolicy.shouldAppendVisitedPoint(
+                previousPoint = previousPoint,
+                candidatePoint = candidatePoint,
+            ),
+        )
     }
 
     private fun sample(
@@ -89,12 +131,15 @@ class LocationSamplePolicyTest {
         capturedAtMillis: Long,
         receivedAtMillis: Long,
         accuracyMeters: Float,
+        provider: String = LocationManager.GPS_PROVIDER,
     ): LocationSample {
         return LocationSample(
             latitude = latitude,
             longitude = longitude,
             capturedAtMillis = capturedAtMillis,
             receivedAtMillis = receivedAtMillis,
+            elapsedRealtimeNanos = capturedAtMillis * 1_000_000L,
+            provider = provider,
             accuracyMeters = accuracyMeters,
         )
     }

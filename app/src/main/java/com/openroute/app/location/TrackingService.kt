@@ -36,11 +36,23 @@ class TrackingService : Service(), LocationListener {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var locationManager: LocationManager
     private lateinit var repository: RouteRepository
+    private lateinit var fusionRuntime: LocationFusionRuntime
 
     override fun onCreate() {
         super.onCreate()
         repository = RouteRepository(applicationContext)
         locationManager = getSystemService(LocationManager::class.java)
+        fusionRuntime = LocationFusionRuntime(applicationContext) { update ->
+            TrackingSessionStore.updateCurrentLocation(update.point)
+            if (update.shouldAppendTrackPoint) {
+                TrackingSessionStore.addPoint(update.point)
+            }
+
+            if (update.source == FusedLocationSource.Gnss || update.shouldAppendTrackPoint) {
+                val trackedPoints = TrackingSessionStore.state.value.points.size
+                updateNotification("Grabando ruta", "$trackedPoints puntos registrados")
+            }
+        }
         createNotificationChannel()
     }
 
@@ -57,26 +69,13 @@ class TrackingService : Service(), LocationListener {
 
     override fun onDestroy() {
         stopLocationUpdates()
+        fusionRuntime.stop()
         serviceScope.cancel()
         super.onDestroy()
     }
 
     override fun onLocationChanged(location: Location) {
-        val sample = location.toLocationSample()
-        if (!LocationSamplePolicy.isUsable(sample)) {
-            return
-        }
-
-        val point = LocationSamplePolicy.toPoint(sample)
-        TrackingSessionStore.updateCurrentLocation(point)
-
-        val previousPoint = TrackingSessionStore.state.value.points.lastOrNull()
-        if (LocationSamplePolicy.shouldAppend(previousPoint, sample)) {
-            TrackingSessionStore.addPoint(point)
-        }
-
-        val trackedPoints = TrackingSessionStore.state.value.points.size
-        updateNotification("Grabando ruta", "$trackedPoints puntos registrados")
+        fusionRuntime.onLocationChanged(location)
     }
 
     @SuppressLint("MissingPermission")
@@ -92,9 +91,12 @@ class TrackingService : Service(), LocationListener {
 
         startForeground(NOTIFICATION_ID, buildNotification("Grabando ruta", "Esperando posición…"))
         TrackingSessionStore.startSession()
+        fusionRuntime.reset()
+        fusionRuntime.start()
 
         val providers = locationManager.preferredRouteProviders()
         if (providers.isEmpty()) {
+            fusionRuntime.stop()
             stopSelf()
             return
         }
@@ -116,6 +118,7 @@ class TrackingService : Service(), LocationListener {
         val session = TrackingSessionStore.finishSession()
         val points = session.points
         stopLocationUpdates()
+        fusionRuntime.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
 
         if (points.size < 2) {

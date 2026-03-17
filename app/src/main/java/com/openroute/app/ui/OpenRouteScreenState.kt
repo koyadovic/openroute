@@ -407,20 +407,38 @@ private fun RouteTrack.routeWindowAround(
         RouteTravelDirection.Forward -> segmentStartIndex + 1
         RouteTravelDirection.Backward -> segmentStartIndex
     }
-    val behindPoints = collectDirectionalWindow(
-        startIndex = previousIndex - ((NAVIGATION_3D_POINTS_BEHIND - 1) * step),
+    val distantBehindPoints = collectDirectionalWindow(
+        startIndex = previousIndex - ((NAVIGATION_3D_POINTS_BEHIND + 1) * step),
         step = step,
         size = NAVIGATION_3D_POINTS_BEHIND,
         wrapAround = wrapAround,
     ).simplifyFor3D()
-    val aheadPoints = collectDirectionalWindow(
+    val coreBehindPoints = collectDirectionalWindow(
+        startIndex = previousIndex - step,
+        step = step,
+        size = 2,
+        wrapAround = wrapAround,
+    )
+    val coreAheadPoints = collectDirectionalWindow(
         startIndex = nextIndex,
+        step = step,
+        size = 2,
+        wrapAround = wrapAround,
+    )
+    val distantAheadPoints = collectDirectionalWindow(
+        startIndex = nextIndex + (2 * step),
         step = step,
         size = NAVIGATION_3D_POINTS_AHEAD,
         wrapAround = wrapAround,
     ).simplifyFor3D()
 
-    return (behindPoints + listOfNotNull(anchorLocation) + aheadPoints).removeNearDuplicates()
+    return (
+        distantBehindPoints +
+            coreBehindPoints +
+            listOfNotNull(anchorLocation) +
+            coreAheadPoints +
+            distantAheadPoints
+        ).removeNearDuplicates()
 }
 
 private fun RouteTrack.collectDirectionalWindow(

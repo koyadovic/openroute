@@ -23,10 +23,32 @@ import com.openroute.app.data.LatLngPoint
 
 class NavigationService : Service(), LocationListener {
     private lateinit var locationManager: LocationManager
+    private lateinit var fusionRuntime: LocationFusionRuntime
 
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(LocationManager::class.java)
+        fusionRuntime = LocationFusionRuntime(applicationContext) { update ->
+            NavigationSessionStore.updateLocation(
+                point = update.point,
+                appendVisited = update.shouldAppendVisitedPoint,
+            )
+
+            if (update.source == FusedLocationSource.Gnss || update.shouldAppendVisitedPoint) {
+                val navigationState = NavigationSessionStore.state.value
+                val routeName = navigationState.route?.name ?: "Ruta"
+                val progress = navigationState.progress
+
+                updateNotification(
+                    title = "Navegando $routeName",
+                    text = if (progress != null) {
+                        "${(progress.completionRatio * 100).toInt()}% · ${progress.remainingDistanceMeters.toDistanceLabel()} restantes"
+                    } else {
+                        "Esperando posicion…"
+                    },
+                )
+            }
+        }
         createNotificationChannel()
     }
 
@@ -43,30 +65,12 @@ class NavigationService : Service(), LocationListener {
 
     override fun onDestroy() {
         stopLocationUpdates()
+        fusionRuntime.stop()
         super.onDestroy()
     }
 
     override fun onLocationChanged(location: Location) {
-        val sample = location.toLocationSample()
-        if (!LocationSamplePolicy.isUsable(sample)) {
-            return
-        }
-
-        val point = LocationSamplePolicy.toPoint(sample)
-
-        NavigationSessionStore.updateLocation(point)
-        val navigationState = NavigationSessionStore.state.value
-        val routeName = navigationState.route?.name ?: "Ruta"
-        val progress = navigationState.progress
-
-        updateNotification(
-            title = "Navegando $routeName",
-            text = if (progress != null) {
-                "${(progress.completionRatio * 100).toInt()}% · ${progress.remainingDistanceMeters.toDistanceLabel()} restantes"
-            } else {
-                "Esperando posicion…"
-            },
-        )
+        fusionRuntime.onLocationChanged(location)
     }
 
     @SuppressLint("MissingPermission")
@@ -82,9 +86,12 @@ class NavigationService : Service(), LocationListener {
         }
 
         startForeground(NOTIFICATION_ID, buildNotification("Navegacion activa", "Esperando posicion…"))
+        fusionRuntime.reset()
+        fusionRuntime.start()
 
         val providers = locationManager.preferredRouteProviders()
         if (providers.isEmpty()) {
+            fusionRuntime.stop()
             stopSelf()
             return
         }
@@ -104,6 +111,7 @@ class NavigationService : Service(), LocationListener {
 
     private fun finalizeAndStop() {
         stopLocationUpdates()
+        fusionRuntime.stop()
         stopForeground(STOP_FOREGROUND_REMOVE)
         NavigationSessionStore.finishSession()
         stopSelf()

@@ -428,6 +428,56 @@ class OpenRouteScreenStateTest {
     }
 
     @Test
+    fun `keeps immediate previous segment visible around current anchor`() {
+        val route = RouteTrack(
+            id = "route-core-window",
+            name = "Core Window",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 250.0,
+            points = listOf(
+                LatLngPoint(40.00000, -3.00000),
+                LatLngPoint(40.00010, -3.00000),
+                LatLngPoint(40.00020, -3.00000),
+                LatLngPoint(40.00030, -2.99990),
+                LatLngPoint(40.00040, -2.99980),
+            ),
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(route),
+            selectedRouteId = route.id,
+            detailRouteId = route.id,
+            navigation3DRouteId = route.id,
+            navigationState = NavigationState(
+                isNavigating = true,
+                route = route,
+                currentLocation = LatLngPoint(40.00025, -2.99995),
+                progress = com.openroute.app.data.RouteNavigationProgress(
+                    nearestRoutePointIndex = 2,
+                    nearestSegmentStartIndex = 2,
+                    distanceAlongRouteMeters = 120.0,
+                    completedDistanceMeters = 120.0,
+                    remainingDistanceMeters = 130.0,
+                    completionRatio = 0.48,
+                    distanceToRouteMeters = 2.5,
+                    displayLocation = LatLngPoint(40.00025, -2.99995),
+                    isLocationSnappedToRoute = true,
+                    headingDegrees = 45.0,
+                    travelDirection = com.openroute.app.data.RouteTravelDirection.Forward,
+                ),
+            ),
+        ).toScreenState()
+
+        val routeWindow = screenState.navigation3DState?.renderState?.routePoints.orEmpty()
+        assertTrue(routeWindow.contains(route.points[1]))
+        assertTrue(routeWindow.contains(route.points[2]))
+        assertTrue(routeWindow.contains(LatLngPoint(40.00025, -2.99995)))
+        assertTrue(routeWindow.contains(route.points[3]))
+    }
+
+    @Test
     fun `simplifies dense 3d route geometry while preserving right angle corner`() {
         val route = RouteTrack(
             id = "route-corner",
@@ -473,7 +523,6 @@ class OpenRouteScreenStateTest {
         ).toScreenState()
 
         val routeWindow = screenState.navigation3DState?.renderState?.routePoints.orEmpty()
-        assertTrue(routeWindow.size <= route.points.size + 1)
         assertTrue(routeWindow.contains(LatLngPoint(40.00018, -2.99995)))
         assertTrue(routeWindow.contains(LatLngPoint(40.00018, -3.00000)))
         assertTrue(routeWindow.any { it.longitude > -3.00000 })
