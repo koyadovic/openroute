@@ -1170,11 +1170,15 @@ private fun HiddenRoutesHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onToggleClick)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Text(
                     text = "Rutas ocultas",
                     style = MaterialTheme.typography.titleMedium,
@@ -1185,8 +1189,22 @@ private fun HiddenRoutesHeader(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            OutlinedButton(onClick = onToggleClick) {
-                Text(state.toggleLabel)
+            Spacer(modifier = Modifier.size(12.dp))
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = if (state.isExpanded) "Ocultar" else "Mostrar",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Toca aquí",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
