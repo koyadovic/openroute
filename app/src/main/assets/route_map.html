@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <link rel="icon" href="data:," />
+    <title>OpenRoute Map</title>
+    <link
+        rel="stylesheet"
+        href="leaflet/leaflet.css"
+    />
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #map {
+            position: fixed;
+            inset: 0;
+        }
+
+        body {
+            background: #f1efe8;
+        }
+
+        .leaflet-container {
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script src="leaflet/leaflet.js"></script>
+    <script>
+        const map = L.map("map", {
+            zoomControl: true,
+            preferCanvas: true
+        }).setView([40.4168, -3.7038], 12);
+
+        function syncMapSize() {
+            requestAnimationFrame(() => map.invalidateSize());
+        }
+
+        window.addEventListener("resize", syncMapSize);
+        setTimeout(syncMapSize, 0);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let routeLayers = [];
+        let liveLayer = null;
+        let currentLocationMarker = null;
+
+        function clearLayers() {
+            routeLayers.forEach(layer => map.removeLayer(layer));
+            routeLayers = [];
+
+            if (liveLayer) {
+                map.removeLayer(liveLayer);
+                liveLayer = null;
+            }
+
+            if (currentLocationMarker) {
+                map.removeLayer(currentLocationMarker);
+                currentLocationMarker = null;
+            }
+        }
+
+        window.renderState = function(payload) {
+            const state = typeof payload === "string" ? JSON.parse(payload) : payload;
+            clearLayers();
+
+            const focus = state.focus || {};
+            const focusRoute = focus.routeId
+                ? (state.routes || []).find(route => route.id === focus.routeId && (route.points || []).length)
+                : null;
+            const focusPoints = [];
+
+            (state.routes || []).forEach(route => {
+                const latLngs = (route.points || []).map(point => [point.latitude, point.longitude]);
+                if (!latLngs.length) {
+                    return;
+                }
+
+                const polyline = L.polyline(latLngs, {
+                    color: route.color || "#0B6E4F",
+                    weight: route.selected ? 6 : 4,
+                    opacity: route.selected ? 0.95 : 0.65
+                }).bindTooltip(route.name || "Route");
+
+                polyline.addTo(map);
+                routeLayers.push(polyline);
+            });
+
+            if (focusRoute) {
+                (focusRoute.points || []).forEach(point => focusPoints.push([point.latitude, point.longitude]));
+            }
+
+            const liveTrack = (state.liveTrack || []).map(point => [point.latitude, point.longitude]);
+            if (liveTrack.length) {
+                liveLayer = L.polyline(liveTrack, {
+                    color: "#F4A261",
+                    weight: 5,
+                    dashArray: "8 8"
+                }).addTo(map);
+                if (!focusRoute) {
+                    liveTrack.forEach(point => focusPoints.push(point));
+                }
+            }
+
+            if (state.currentLocation) {
+                const current = [state.currentLocation.latitude, state.currentLocation.longitude];
+                currentLocationMarker = L.circleMarker(current, {
+                    radius: 8,
+                    color: "#111827",
+                    fillColor: "#F4A261",
+                    fillOpacity: 1,
+                    weight: 2
+                }).addTo(map);
+                if (focus.includeCurrentLocation) {
+                    focusPoints.push(current);
+                }
+            }
+
+            if (focus.preferCurrentLocationZoom && state.currentLocation) {
+                map.setView([state.currentLocation.latitude, state.currentLocation.longitude], 15);
+            } else if (focusPoints.length > 1) {
+                map.fitBounds(focusPoints, { padding: [20, 20], maxZoom: 16 });
+            } else if (focusPoints.length === 1) {
+                map.setView(focusPoints[0], 15);
+            } else {
+                const allRoutePoints = [];
+                (state.routes || []).forEach(route => {
+                    (route.points || []).forEach(point => allRoutePoints.push([point.latitude, point.longitude]));
+                });
+                if (allRoutePoints.length > 1) {
+                    map.fitBounds(allRoutePoints, { padding: [20, 20], maxZoom: 15 });
+                } else if (allRoutePoints.length === 1) {
+                    map.setView(allRoutePoints[0], 15);
+                }
+            }
+        };
+
+        if (window.__openRouteQueuedState) {
+            const queuedState = window.__openRouteQueuedState;
+            window.__openRouteQueuedState = null;
+            window.renderState(queuedState);
+        }
+    </script>
+</body>
+</html>
