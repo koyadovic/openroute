@@ -38,6 +38,8 @@ internal data class OpenRouteUiState(
     val liveTrack: List<com.openroute.app.data.LatLngPoint> = emptyList(),
     val currentLocation: com.openroute.app.data.LatLngPoint? = null,
     val navigationState: NavigationState = NavigationState(),
+    val renameRouteId: String? = null,
+    val renameDraft: String = "",
     val message: String? = null,
 ) {
     val visibleRoutes: List<RouteTrack>
@@ -220,7 +222,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closeRouteDetail() {
-        _uiState.update { it.copy(detailRouteId = null) }
+        _uiState.update { it.copy(detailRouteId = null, renameRouteId = null, renameDraft = "") }
     }
 
     fun syncDownloadedGpxFiles() {
@@ -341,6 +343,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun consumeMessage() {
         _uiState.update { it.copy(message = null) }
+    }
+
+    fun openRenameRoute() {
+        val route = _uiState.value.detailRoute?.takeIf { it.source == RouteSource.RECORDED } ?: return
+        _uiState.update { current ->
+            current.copy(
+                renameRouteId = route.id,
+                renameDraft = route.name,
+            )
+        }
+    }
+
+    fun updateRenameDraft(name: String) {
+        _uiState.update { current ->
+            if (current.renameRouteId == null) {
+                current
+            } else {
+                current.copy(renameDraft = name)
+            }
+        }
+    }
+
+    fun dismissRenameRoute() {
+        _uiState.update { it.copy(renameRouteId = null, renameDraft = "") }
+    }
+
+    fun confirmRenameRoute() {
+        val currentState = _uiState.value
+        val routeId = currentState.renameRouteId ?: return
+        val newName = currentState.renameDraft.trim()
+        if (newName.isEmpty()) {
+            showMessage("El nombre no puede estar vacío.")
+            return
+        }
+
+        viewModelScope.launch {
+            val renamedRoute = repository.renameRoute(routeId, newName) ?: return@launch
+            NavigationSessionStore.refreshRoute(renamedRoute)
+            _uiState.update { current ->
+                current.copy(
+                    routes = current.routes.map { route ->
+                        if (route.id == routeId) {
+                            renamedRoute
+                        } else {
+                            route
+                        }
+                    },
+                    renameRouteId = null,
+                    renameDraft = "",
+                    message = "Ruta renombrada: ${renamedRoute.name}",
+                )
+            }
+        }
     }
 }
 

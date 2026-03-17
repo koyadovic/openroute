@@ -33,6 +33,7 @@ class RouteNavigationEngineTest {
         )
 
         assertEquals(1, progress.nearestRoutePointIndex)
+        assertTrue(progress.nearestSegmentStartIndex in 0..1)
         assertTrue(progress.completedDistanceMeters > 0.0)
         assertTrue(progress.remainingDistanceMeters > 0.0)
         assertTrue(progress.completionRatio in 0.3..0.7)
@@ -126,6 +127,7 @@ class RouteNavigationEngineTest {
 
         assertEquals(RouteTravelDirection.Backward, progress.travelDirection)
         assertTrue(progress.headingDegrees in 150.0..210.0)
+        assertTrue(progress.completedDistanceMeters < progress.remainingDistanceMeters)
     }
 
     @Test
@@ -153,5 +155,37 @@ class RouteNavigationEngineTest {
         )
 
         assertEquals(92.0, progress.headingDegrees, 0.001)
+    }
+
+    @Test
+    fun `uses current segment heading and reverse progress when traversing route backwards near start`() {
+        val route = RouteTrack(
+            id = "route-6",
+            name = "Block",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1L,
+            distanceMeters = 0.0,
+            points = listOf(
+                LatLngPoint(40.0000, -3.0000),
+                LatLngPoint(40.0010, -3.0000),
+                LatLngPoint(40.0020, -3.0000),
+            ),
+        )
+        val recentLocations = listOf(
+            LatLngPoint(40.00055, -3.0, timestampMillis = 0L),
+            LatLngPoint(40.00035, -3.0, timestampMillis = 20_000L),
+            LatLngPoint(40.00015, -3.0, timestampMillis = 40_000L),
+        )
+
+        val progress = RouteNavigationEngine.calculate(
+            route = route,
+            currentLocation = recentLocations.last(),
+            recentLocations = recentLocations.dropLast(1),
+        )
+
+        assertEquals(RouteTravelDirection.Backward, progress.travelDirection)
+        assertTrue(progress.completionRatio > 0.8)
+        assertTrue(progress.headingDegrees in 170.0..190.0)
+        assertEquals(progress.displayLocation?.longitude ?: 0.0, -3.0, 0.00001)
     }
 }

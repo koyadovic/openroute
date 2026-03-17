@@ -15,6 +15,8 @@ enum class RouteTravelDirection {
 
 data class RouteNavigationProgress(
     val nearestRoutePointIndex: Int,
+    val nearestSegmentStartIndex: Int,
+    val distanceAlongRouteMeters: Double,
     val completedDistanceMeters: Double,
     val remainingDistanceMeters: Double,
     val completionRatio: Double,
@@ -36,6 +38,8 @@ object RouteNavigationEngine {
         if (route.points.isEmpty()) {
             return RouteNavigationProgress(
                 nearestRoutePointIndex = 0,
+                nearestSegmentStartIndex = 0,
+                distanceAlongRouteMeters = 0.0,
                 completedDistanceMeters = 0.0,
                 remainingDistanceMeters = 0.0,
                 completionRatio = 0.0,
@@ -51,12 +55,13 @@ object RouteNavigationEngine {
 
         val nearestProjection = route.points.closestProjectionTo(currentLocation)
         val nearestIndex = nearestProjection.nearestRoutePointIndex
+        val isLoopRoute = route.points.isClosedLoop()
 
-        val completedDistance = (cumulativeDistances.getOrElse(nearestProjection.segmentStartIndex) { 0.0 } +
+        val forwardDistanceAlongRoute = (cumulativeDistances.getOrElse(nearestProjection.segmentStartIndex) { 0.0 } +
             nearestProjection.distanceAlongSegmentMeters)
             .coerceIn(0.0, totalDistance)
-        val remainingDistance = (totalDistance - completedDistance).coerceAtLeast(0.0)
-        val displayLocation = if (nearestProjection.distanceToRouteMeters <= MAX_ROUTE_SNAP_DISTANCE_METERS) {
+        val isSnappedToRoute = nearestProjection.distanceToRouteMeters <= MAX_ROUTE_SNAP_DISTANCE_METERS
+        val displayLocation = if (isSnappedToRoute) {
             nearestProjection.projectedPoint
         } else {
             currentLocation
@@ -64,13 +69,21 @@ object RouteNavigationEngine {
         val currentSpeed = (recentLocations + displayLocation)
             .takeLast(MAX_SPEED_SAMPLES)
             .estimateSpeedMetersPerSecond()
-        val routeHeadingForward = route.points.headingDegreesFromProjection(nearestProjection)
+        val routeHeadingForward = route.points.headingDegreesForSegment(nearestProjection.segmentStartIndex)
         val routeHeadingBackward = routeHeadingForward?.let(::reverseHeadingDegrees)
         val movementHeading = (recentLocations + displayLocation)
             .takeLast(MAX_HEADING_SAMPLES)
             .movementHeadingDegrees()
         val sensorHeading = currentLocation.bearingDegrees?.normalizeHeadingDegrees()
+        val recentRouteDistances = recentLocations
+            .takeLast(MAX_ROUTE_PROGRESS_SAMPLES)
+            .map { location ->
+                route.points.closestProjectionTo(location).distanceAlongRouteMeters(cumulativeDistances)
+            } + forwardDistanceAlongRoute
         val travelDirection = resolveTravelDirection(
+            recentRouteDistances = recentRouteDistances,
+            totalDistance = totalDistance,
+            isLoopRoute = isLoopRoute,
             movementHeading = movementHeading,
             sensorHeading = sensorHeading,
             routeHeadingForward = routeHeadingForward,
@@ -79,14 +92,25 @@ object RouteNavigationEngine {
             RouteTravelDirection.Forward -> routeHeadingForward ?: routeHeadingBackward
             RouteTravelDirection.Backward -> routeHeadingBackward ?: routeHeadingForward
         }
-        val headingDegrees = resolveHeadingDegrees(
-            movementHeading = movementHeading,
-            sensorHeading = sensorHeading,
-            routeHeading = routeHeading,
-        )
+        val completedDistance = when (travelDirection) {
+            RouteTravelDirection.Forward -> forwardDistanceAlongRoute
+            RouteTravelDirection.Backward -> (totalDistance - forwardDistanceAlongRoute).coerceIn(0.0, totalDistance)
+        }
+        val remainingDistance = (totalDistance - completedDistance).coerceAtLeast(0.0)
+        val headingDegrees = if (isSnappedToRoute && routeHeading != null) {
+            routeHeading
+        } else {
+            resolveHeadingDegrees(
+                movementHeading = movementHeading,
+                sensorHeading = sensorHeading,
+                routeHeading = routeHeading,
+            )
+        }
 
         return RouteNavigationProgress(
             nearestRoutePointIndex = nearestIndex,
+            nearestSegmentStartIndex = nearestProjection.segmentStartIndex,
+            distanceAlongRouteMeters = forwardDistanceAlongRoute,
             completedDistanceMeters = completedDistance,
             remainingDistanceMeters = remainingDistance,
             completionRatio = if (totalDistance > 0.0) {
@@ -100,7 +124,7 @@ object RouteNavigationEngine {
                 ?.let { speed -> (remainingDistance / speed).roundToLong() },
             currentSpeedMetersPerSecond = currentSpeed,
             displayLocation = displayLocation,
-            isLocationSnappedToRoute = displayLocation != currentLocation,
+            isLocationSnappedToRoute = isSnappedToRoute,
             headingDegrees = headingDegrees,
             travelDirection = travelDirection,
         )
@@ -114,6 +138,11 @@ private data class RouteProjection(
     val distanceAlongSegmentMeters: Double,
     val distanceToRouteMeters: Double,
 )
+
+private fun RouteProjection.distanceAlongRouteMeters(cumulativeDistances: List<Double>): Double {
+    return (cumulativeDistances.getOrElse(segmentStartIndex) { 0.0 } + distanceAlongSegmentMeters)
+        .coerceAtLeast(0.0)
+}
 
 private fun List<LatLngPoint>.cumulativeDistances(): List<Double> {
     if (isEmpty()) {
@@ -245,19 +274,14 @@ private fun List<LatLngPoint>.movementHeadingDegrees(): Double? {
     return anchorPoint.headingDegreesTo(latestPoint)
 }
 
-private fun List<LatLngPoint>.headingDegreesFromProjection(
-    projection: RouteProjection,
-): Double? {
+private fun List<LatLngPoint>.headingDegreesForSegment(segmentStartIndex: Int): Double? {
     if (size < 2) {
         return null
     }
 
-    val targetIndex = (projection.segmentStartIndex + ROUTE_HEADING_LOOKAHEAD_POINTS)
-        .coerceAtMost(lastIndex)
-        .takeIf { it >= projection.segmentStartIndex + 1 }
-        ?: (projection.segmentStartIndex + 1).coerceAtMost(lastIndex)
-
-    return projection.projectedPoint.headingDegreesTo(get(targetIndex))
+    val start = getOrNull(segmentStartIndex) ?: return null
+    val end = getOrNull(segmentStartIndex + 1) ?: return null
+    return start.headingDegreesTo(end)
 }
 
 private fun LatLngPoint.distanceTo(other: LatLngPoint): Double {
@@ -282,10 +306,25 @@ private fun LatLngPoint.headingDegreesTo(other: LatLngPoint): Double {
 }
 
 private fun resolveTravelDirection(
+    recentRouteDistances: List<Double>,
+    totalDistance: Double,
+    isLoopRoute: Boolean,
     movementHeading: Double?,
     sensorHeading: Double?,
     routeHeadingForward: Double?,
 ): RouteTravelDirection {
+    resolveRouteDistanceDelta(
+        routeDistances = recentRouteDistances,
+        totalDistance = totalDistance,
+        isLoopRoute = isLoopRoute,
+    )?.let { routeDistanceDelta ->
+        return if (routeDistanceDelta >= 0.0) {
+            RouteTravelDirection.Forward
+        } else {
+            RouteTravelDirection.Backward
+        }
+    }
+
     val headingToCompare = movementHeading ?: sensorHeading ?: return RouteTravelDirection.Forward
     val forwardHeading = routeHeadingForward ?: return RouteTravelDirection.Forward
 
@@ -352,11 +391,56 @@ private fun headingDifferenceDegrees(first: Double, second: Double): Double {
     return if (difference > 180.0) 360.0 - difference else difference
 }
 
+private fun resolveRouteDistanceDelta(
+    routeDistances: List<Double>,
+    totalDistance: Double,
+    isLoopRoute: Boolean,
+): Double? {
+    if (routeDistances.size < 2 || totalDistance <= 0.0) {
+        return null
+    }
+
+    val latestDistance = routeDistances.last()
+    return routeDistances
+        .asReversed()
+        .drop(1)
+        .map { candidateDistance ->
+            if (isLoopRoute) {
+                circularDistanceDelta(
+                    fromDistance = candidateDistance,
+                    toDistance = latestDistance,
+                    totalDistance = totalDistance,
+                )
+            } else {
+                latestDistance - candidateDistance
+            }
+        }
+        .firstOrNull { kotlin.math.abs(it) >= MIN_ROUTE_DISTANCE_PROGRESS_METERS }
+}
+
+private fun circularDistanceDelta(
+    fromDistance: Double,
+    toDistance: Double,
+    totalDistance: Double,
+): Double {
+    val rawDelta = toDistance - fromDistance
+    val halfDistance = totalDistance / 2.0
+    return when {
+        rawDelta > halfDistance -> rawDelta - totalDistance
+        rawDelta < -halfDistance -> rawDelta + totalDistance
+        else -> rawDelta
+    }
+}
+
 private fun Double.normalizeHeadingDegrees(): Double {
     return ((this % 360.0) + 360.0) % 360.0
 }
 
 private fun Double.toRadians(): Double = this * PI / 180.0
+
+private fun List<LatLngPoint>.isClosedLoop(): Boolean {
+    return size >= 4 && first().distanceTo(last()) <= CLOSED_LOOP_ROUTE_THRESHOLD_METERS
+}
 
 private data class LocalReference(
     val latitude: Double,
@@ -397,7 +481,9 @@ private fun LocalPoint.toLatLngPoint(
 private const val EARTH_RADIUS_METERS = 6_371_000.0
 private const val MAX_SPEED_SAMPLES = 6
 private const val MAX_HEADING_SAMPLES = 5
+private const val MAX_ROUTE_PROGRESS_SAMPLES = 6
 private const val MIN_MOVING_SPEED_METERS_PER_SECOND = 0.6
 private const val MIN_HEADING_DISTANCE_METERS = 8.0
+private const val MIN_ROUTE_DISTANCE_PROGRESS_METERS = 6.0
 private const val MAX_ROUTE_SNAP_DISTANCE_METERS = 30.0
-private const val ROUTE_HEADING_LOOKAHEAD_POINTS = 3
+private const val CLOSED_LOOP_ROUTE_THRESHOLD_METERS = 35.0

@@ -74,8 +74,19 @@ data class RouteDetailState(
     val pointsLabel: String,
     val sourceLabel: String,
     val fileLabel: String? = null,
+    val canRename: Boolean = false,
+    val renameLabel: String = "Renombrar",
+    val renameDialog: RouteRenameDialogState? = null,
     val backLabel: String = "Volver",
     val navigationState: RouteDetailNavigationState = RouteDetailNavigationState(),
+)
+
+data class RouteRenameDialogState(
+    val title: String = "Renombrar ruta",
+    val name: String,
+    val confirmLabel: String = "Guardar",
+    val dismissLabel: String = "Cancelar",
+    val isConfirmEnabled: Boolean = true,
 )
 
 data class RouteDetailNavigationState(
@@ -238,6 +249,7 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
         detailState = detailRoute?.toDetailState(
             isNavigating = navigationState.isActiveFor(detailRoute.id),
             progress = navigationState.progressFor(detailRoute.id),
+            renameDraft = renameDraft.takeIf { renameRouteId == detailRoute.id },
         ),
         navigation3DState = navigation3DState,
         snackbarMessage = message,
@@ -274,6 +286,7 @@ internal fun resolveDownloadsBannerState(
 private fun RouteTrack.toDetailState(
     isNavigating: Boolean,
     progress: RouteNavigationProgress?,
+    renameDraft: String?,
 ): RouteDetailState {
     return RouteDetailState(
         routeId = id,
@@ -284,6 +297,13 @@ private fun RouteTrack.toDetailState(
         pointsLabel = points.size.toString(),
         sourceLabel = if (source == RouteSource.RECORDED) "REC" else "GPX",
         fileLabel = originalFileName,
+        canRename = source == RouteSource.RECORDED,
+        renameDialog = renameDraft?.takeIf { source == RouteSource.RECORDED }?.let { draft ->
+            RouteRenameDialogState(
+                name = draft,
+                isConfirmEnabled = draft.trim().isNotEmpty(),
+            )
+        },
         navigationState = RouteDetailNavigationState(
             isNavigating = isNavigating,
             actionLabel = if (isNavigating) "Abrir guía 3D" else "Iniciar navegación",
@@ -309,6 +329,7 @@ private fun RouteTrack.toNavigation3DState(
     currentLocation: com.openroute.app.data.LatLngPoint?,
 ): Navigation3DState {
     val nearestIndex = progress?.nearestRoutePointIndex ?: 0
+    val segmentStartIndex = progress?.nearestSegmentStartIndex ?: nearestIndex.coerceIn(0, (points.lastIndex - 1).coerceAtLeast(0))
     val travelDirection = progress?.travelDirection ?: RouteTravelDirection.Forward
     return Navigation3DState(
         routeId = id,
@@ -327,13 +348,14 @@ private fun RouteTrack.toNavigation3DState(
         showsOffRouteAlert = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
         renderState = Navigation3DRenderState(
             routePoints = routeWindowAround(
-                nearestIndex = nearestIndex,
+                segmentStartIndex = segmentStartIndex,
+                anchorLocation = currentLocation,
                 travelDirection = travelDirection,
-            ).simplifyFor3D(),
+            ),
             visitedPoints = emptyList(),
             currentLocation = currentLocation,
             headingDegrees = progress?.headingDegrees ?: headingDegreesAround(
-                nearestIndex = nearestIndex,
+                segmentStartIndex = segmentStartIndex,
                 travelDirection = travelDirection,
             ),
             isOffRoute = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
@@ -364,24 +386,41 @@ private fun RouteTrack.metricsSubtitle(): String {
 }
 
 private fun RouteTrack.routeWindowAround(
-    nearestIndex: Int,
+    segmentStartIndex: Int,
+    anchorLocation: com.openroute.app.data.LatLngPoint?,
     travelDirection: RouteTravelDirection,
 ): List<com.openroute.app.data.LatLngPoint> {
     if (points.isEmpty()) {
         return emptyList()
     }
 
+    val wrapAround = isClosedLoop()
     val step = when (travelDirection) {
         RouteTravelDirection.Forward -> 1
         RouteTravelDirection.Backward -> -1
     }
-    val startIndex = nearestIndex - (NAVIGATION_3D_POINTS_BEHIND * step)
-    return collectDirectionalWindow(
-        startIndex = startIndex,
+    val previousIndex = when (travelDirection) {
+        RouteTravelDirection.Forward -> segmentStartIndex
+        RouteTravelDirection.Backward -> segmentStartIndex + 1
+    }
+    val nextIndex = when (travelDirection) {
+        RouteTravelDirection.Forward -> segmentStartIndex + 1
+        RouteTravelDirection.Backward -> segmentStartIndex
+    }
+    val behindPoints = collectDirectionalWindow(
+        startIndex = previousIndex - ((NAVIGATION_3D_POINTS_BEHIND - 1) * step),
         step = step,
-        size = NAVIGATION_3D_POINTS_BEHIND + NAVIGATION_3D_POINTS_AHEAD + 1,
-        wrapAround = isClosedLoop(),
-    )
+        size = NAVIGATION_3D_POINTS_BEHIND,
+        wrapAround = wrapAround,
+    ).simplifyFor3D()
+    val aheadPoints = collectDirectionalWindow(
+        startIndex = nextIndex,
+        step = step,
+        size = NAVIGATION_3D_POINTS_AHEAD,
+        wrapAround = wrapAround,
+    ).simplifyFor3D()
+
+    return (behindPoints + listOfNotNull(anchorLocation) + aheadPoints).removeNearDuplicates()
 }
 
 private fun RouteTrack.collectDirectionalWindow(
@@ -491,32 +530,18 @@ private fun perpendicularDistanceMeters(
 }
 
 private fun RouteTrack.headingDegreesAround(
-    nearestIndex: Int,
+    segmentStartIndex: Int,
     travelDirection: RouteTravelDirection,
 ): Double {
     if (points.size < 2) {
         return 0.0
     }
 
-    val wrapAround = isClosedLoop()
-    val step = when (travelDirection) {
-        RouteTravelDirection.Forward -> 1
-        RouteTravelDirection.Backward -> -1
+    val forwardHeading = headingDegreesForSegment(segmentStartIndex) ?: return 0.0
+    return when (travelDirection) {
+        RouteTravelDirection.Forward -> forwardHeading
+        RouteTravelDirection.Backward -> (forwardHeading + 180.0) % 360.0
     }
-    val fromIndex = normalizeRouteIndex(nearestIndex, wrapAround) ?: return 0.0
-    val toIndex = normalizeRouteIndex(nearestIndex + step, wrapAround)
-        ?: normalizeRouteIndex(nearestIndex - step, wrapAround)
-        ?: return 0.0
-
-    if (fromIndex == toIndex) {
-        return 0.0
-    }
-    val from = points[fromIndex]
-    val to = points[toIndex]
-
-    val latitudeDelta = to.latitude - from.latitude
-    val longitudeDelta = to.longitude - from.longitude
-    return Math.toDegrees(kotlin.math.atan2(longitudeDelta, latitudeDelta))
 }
 
 private fun RouteTrack.normalizeRouteIndex(
@@ -530,9 +555,42 @@ private fun RouteTrack.normalizeRouteIndex(
     }
 }
 
+private fun RouteTrack.headingDegreesForSegment(segmentStartIndex: Int): Double? {
+    if (points.size < 2) {
+        return null
+    }
+
+    val wrapAround = isClosedLoop()
+    val fromIndex = normalizeRouteIndex(segmentStartIndex, wrapAround) ?: return null
+    val toIndex = normalizeRouteIndex(segmentStartIndex + 1, wrapAround) ?: return null
+    if (fromIndex == toIndex) {
+        return null
+    }
+
+    val from = points[fromIndex]
+    val to = points[toIndex]
+    val latitudeDelta = to.latitude - from.latitude
+    val longitudeDelta = to.longitude - from.longitude
+    return Math.toDegrees(kotlin.math.atan2(longitudeDelta, latitudeDelta))
+}
+
 private fun RouteTrack.isClosedLoop(): Boolean {
     return points.size >= 4 &&
         points.first().distanceTo(points.last()) <= CLOSED_LOOP_ROUTE_THRESHOLD_METERS
+}
+
+private fun List<com.openroute.app.data.LatLngPoint>.removeNearDuplicates(): List<com.openroute.app.data.LatLngPoint> {
+    if (size < 2) {
+        return this
+    }
+
+    return buildList(size) {
+        for (point in this@removeNearDuplicates) {
+            if (lastOrNull()?.distanceTo(point) ?: Double.MAX_VALUE > MIN_RENDER_POINT_DISTANCE_METERS) {
+                add(point)
+            }
+        }
+    }
 }
 
 private fun com.openroute.app.data.LatLngPoint.distanceTo(
@@ -601,3 +659,4 @@ private const val NAVIGATION_3D_POINTS_BEHIND = 8
 private const val NAVIGATION_3D_POINTS_AHEAD = 28
 private const val CLOSED_LOOP_ROUTE_THRESHOLD_METERS = 35.0
 private const val NAVIGATION_3D_SIMPLIFICATION_TOLERANCE_METERS = 4.0
+private const val MIN_RENDER_POINT_DISTANCE_METERS = 1.0

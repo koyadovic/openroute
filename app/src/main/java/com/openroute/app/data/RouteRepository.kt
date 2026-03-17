@@ -71,6 +71,27 @@ class RouteRepository(context: Context) {
         routeToUpdate.copy(isNew = false)
     }
 
+    suspend fun renameRoute(routeId: String, name: String): RouteTrack? = withContext(Dispatchers.IO) {
+        val normalizedName = name.trim()
+        if (normalizedName.isEmpty()) {
+            return@withContext null
+        }
+
+        val currentRoutes = readRoutesInternal()
+        val routeToUpdate = currentRoutes.firstOrNull { it.id == routeId } ?: return@withContext null
+        val updatedRoute = routeToUpdate.copy(name = normalizedName)
+        val updatedRoutes = currentRoutes.map { route ->
+            if (route.id == routeId) {
+                updatedRoute
+            } else {
+                route
+            }
+        }
+
+        writeRoutesInternal(updatedRoutes)
+        updatedRoute
+    }
+
     private fun readRoutesInternal(): List<RouteTrack> {
         if (!storageFile.exists()) {
             return emptyList()

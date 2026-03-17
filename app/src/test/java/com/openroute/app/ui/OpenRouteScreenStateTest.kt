@@ -95,6 +95,8 @@ class OpenRouteScreenStateTest {
                 visitedPoints = listOf(LatLngPoint(40.405, -3.695)),
                 progress = com.openroute.app.data.RouteNavigationProgress(
                     nearestRoutePointIndex = 1,
+                    nearestSegmentStartIndex = 1,
+                    distanceAlongRouteMeters = 4_500.0,
                     completedDistanceMeters = 4_500.0,
                     remainingDistanceMeters = 5_500.0,
                     completionRatio = 0.45,
@@ -123,6 +125,34 @@ class OpenRouteScreenStateTest {
         assertFalse(screenState.detailState?.navigationState?.showsOffRouteAlert == true)
         assertEquals("Abrir guía 3D", screenState.detailState?.navigationState?.actionLabel)
         assertEquals("Detener navegación", screenState.detailState?.navigationState?.secondaryActionLabel)
+    }
+
+    @Test
+    fun `shows rename affordance for recorded detail route`() {
+        val route = RouteTrack(
+            id = "route-rename",
+            name = "Ride 1",
+            source = RouteSource.RECORDED,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 1_200.0,
+            points = listOf(
+                LatLngPoint(40.4, -3.7),
+                LatLngPoint(40.401, -3.699),
+            ),
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(route),
+            selectedRouteId = route.id,
+            detailRouteId = route.id,
+            renameRouteId = route.id,
+            renameDraft = "Ride cerca de casa",
+        ).toScreenState()
+
+        assertTrue(screenState.detailState?.canRename == true)
+        assertEquals("Ride cerca de casa", screenState.detailState?.renameDialog?.name)
+        assertTrue(screenState.detailState?.renameDialog?.isConfirmEnabled == true)
     }
 
     @Test
@@ -268,6 +298,8 @@ class OpenRouteScreenStateTest {
                 currentLocation = LatLngPoint(40.412, -3.688),
                 progress = com.openroute.app.data.RouteNavigationProgress(
                     nearestRoutePointIndex = 1,
+                    nearestSegmentStartIndex = 0,
+                    distanceAlongRouteMeters = 1_000.0,
                     completedDistanceMeters = 1_000.0,
                     remainingDistanceMeters = 7_000.0,
                     completionRatio = 0.125,
@@ -314,6 +346,8 @@ class OpenRouteScreenStateTest {
                 ),
                 progress = com.openroute.app.data.RouteNavigationProgress(
                     nearestRoutePointIndex = 1,
+                    nearestSegmentStartIndex = 1,
+                    distanceAlongRouteMeters = 1_250.0,
                     completedDistanceMeters = 1_250.0,
                     remainingDistanceMeters = 7_250.0,
                     completionRatio = 0.147,
@@ -335,6 +369,11 @@ class OpenRouteScreenStateTest {
         assertEquals(172.0, screenState.navigation3DState?.renderState?.headingDegrees ?: 0.0, 0.001)
         assertTrue((screenState.navigation3DState?.renderState?.routePoints?.size ?: 0) >= 2)
         assertTrue(screenState.navigation3DState?.renderState?.visitedPoints?.isEmpty() == true)
+        assertTrue(
+            screenState.navigation3DState?.renderState?.routePoints?.contains(
+                LatLngPoint(40.4012, -3.6994),
+            ) == true,
+        )
     }
 
     @Test
@@ -366,6 +405,8 @@ class OpenRouteScreenStateTest {
                 currentLocation = LatLngPoint(40.00000, -2.99990),
                 progress = com.openroute.app.data.RouteNavigationProgress(
                     nearestRoutePointIndex = route.points.lastIndex,
+                    nearestSegmentStartIndex = route.points.lastIndex - 1,
+                    distanceAlongRouteMeters = 300.0,
                     completedDistanceMeters = 300.0,
                     remainingDistanceMeters = 20.0,
                     completionRatio = 0.94,
@@ -380,7 +421,9 @@ class OpenRouteScreenStateTest {
 
         val routeWindow = screenState.navigation3DState?.renderState?.routePoints.orEmpty()
         assertTrue(routeWindow.size >= 4)
-        assertEquals(route.points.first(), routeWindow.last())
+        assertTrue(routeWindow.contains(LatLngPoint(40.00000, -2.99990)))
+        assertTrue(routeWindow.any { it == route.points.last() })
+        assertTrue(routeWindow.any { it == route.points.first() })
         assertTrue(routeWindow.any { it == route.points[1] })
     }
 
@@ -415,6 +458,8 @@ class OpenRouteScreenStateTest {
                 currentLocation = LatLngPoint(40.00018, -2.99995),
                 progress = com.openroute.app.data.RouteNavigationProgress(
                     nearestRoutePointIndex = 4,
+                    nearestSegmentStartIndex = 3,
+                    distanceAlongRouteMeters = 70.0,
                     completedDistanceMeters = 70.0,
                     remainingDistanceMeters = 50.0,
                     completionRatio = 0.58,
@@ -428,7 +473,9 @@ class OpenRouteScreenStateTest {
         ).toScreenState()
 
         val routeWindow = screenState.navigation3DState?.renderState?.routePoints.orEmpty()
-        assertTrue(routeWindow.size < route.points.size)
+        assertTrue(routeWindow.size <= route.points.size + 1)
+        assertTrue(routeWindow.contains(LatLngPoint(40.00018, -2.99995)))
         assertTrue(routeWindow.contains(LatLngPoint(40.00018, -3.00000)))
+        assertTrue(routeWindow.any { it.longitude > -3.00000 })
     }
 }

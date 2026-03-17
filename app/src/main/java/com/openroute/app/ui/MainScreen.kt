@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -40,10 +41,12 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -224,6 +227,10 @@ fun MainRoute(viewModel: MainViewModel) {
         onHideSelectedClick = viewModel::hideSelectedRoute,
         onOpenDetailClick = viewModel::openSelectedRouteDetail,
         onCloseDetailClick = viewModel::closeRouteDetail,
+        onOpenRenameRouteClick = viewModel::openRenameRoute,
+        onRenameDraftChange = viewModel::updateRenameDraft,
+        onConfirmRenameRouteClick = viewModel::confirmRenameRoute,
+        onDismissRenameRouteClick = viewModel::dismissRenameRoute,
         onNavigationClick = {
             val isNavigating = screenState.detailState?.navigationState?.isNavigating == true
             if (isNavigating) {
@@ -257,6 +264,10 @@ fun OpenRouteScreen(
     onHideSelectedClick: () -> Unit,
     onOpenDetailClick: () -> Unit,
     onCloseDetailClick: () -> Unit,
+    onOpenRenameRouteClick: () -> Unit,
+    onRenameDraftChange: (String) -> Unit,
+    onConfirmRenameRouteClick: () -> Unit,
+    onDismissRenameRouteClick: () -> Unit,
     onNavigationClick: () -> Unit,
     onStopNavigationClick: () -> Unit,
     onCloseNavigation3DClick: () -> Unit,
@@ -307,6 +318,10 @@ fun OpenRouteScreen(
                 state = state.detailState,
                 mapState = state.mapState,
                 onCloseDetailClick = onCloseDetailClick,
+                onOpenRenameRouteClick = onOpenRenameRouteClick,
+                onRenameDraftChange = onRenameDraftChange,
+                onConfirmRenameRouteClick = onConfirmRenameRouteClick,
+                onDismissRenameRouteClick = onDismissRenameRouteClick,
                 onNavigationClick = onNavigationClick,
                 onStopNavigationClick = onStopNavigationClick,
                 modifier = Modifier
@@ -425,6 +440,10 @@ private fun RouteDetailScreen(
     state: RouteDetailState?,
     mapState: com.openroute.app.data.MapRenderState,
     onCloseDetailClick: () -> Unit,
+    onOpenRenameRouteClick: () -> Unit,
+    onRenameDraftChange: (String) -> Unit,
+    onConfirmRenameRouteClick: () -> Unit,
+    onDismissRenameRouteClick: () -> Unit,
     onNavigationClick: () -> Unit,
     onStopNavigationClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -481,6 +500,11 @@ private fun RouteDetailScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                if (state.canRename) {
+                    OutlinedButton(onClick = onOpenRenameRouteClick) {
+                        Text(state.renameLabel)
+                    }
+                }
             }
         }
 
@@ -521,6 +545,15 @@ private fun RouteDetailScreen(
             onNavigationClick = onNavigationClick,
             onStopNavigationClick = onStopNavigationClick,
         )
+
+        state.renameDialog?.let { dialogState ->
+            RenameRouteDialog(
+                state = dialogState,
+                onValueChange = onRenameDraftChange,
+                onConfirm = onConfirmRenameRouteClick,
+                onDismiss = onDismissRenameRouteClick,
+            )
+        }
     }
 }
 
@@ -841,6 +874,40 @@ private fun NavigationCard(
             }
         }
     }
+}
+
+@Composable
+private fun RenameRouteDialog(
+    state: RouteRenameDialogState,
+    onValueChange: (String) -> Unit,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(state.title) },
+        text = {
+            OutlinedTextField(
+                value = state.name,
+                onValueChange = onValueChange,
+                singleLine = true,
+                label = { Text("Nombre") },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                enabled = state.isConfirmEnabled,
+            ) {
+                Text(state.confirmLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(state.dismissLabel)
+            }
+        },
+    )
 }
 
 @Composable

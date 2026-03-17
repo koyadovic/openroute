@@ -53,5 +53,15 @@ object NavigationSessionStore {
         _state.value = NavigationState()
     }
 
+    fun refreshRoute(route: RouteTrack) {
+        _state.update { current ->
+            if (current.route?.id == route.id) {
+                current.copy(route = route)
+            } else {
+                current
+            }
+        }
+    }
+
     private const val MAX_VISITED_POINTS = 500
 }
