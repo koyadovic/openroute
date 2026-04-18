@@ -120,6 +120,36 @@ class LocationFusionEngineTest {
         assertTrue((imuPrediction?.point?.latitude ?: 0.0) > (secondFix?.point?.latitude ?: 0.0))
     }
 
+    @Test
+    fun `reacquires tracking after a prolonged gps gap`() {
+        val engine = LocationFusionEngine()
+        val firstFix = engine.updateFromLocation(
+            sample(
+                latitude = 40.416800,
+                longitude = -3.703800,
+                capturedAtMillis = 1_000L,
+                accuracyMeters = 5f,
+                speedMetersPerSecond = 4.0,
+                bearingDegrees = 0.0,
+            ),
+        )
+
+        val recoveredFix = engine.updateFromLocation(
+            sample(
+                latitude = 40.420400,
+                longitude = -3.703800,
+                capturedAtMillis = 61_000L,
+                accuracyMeters = 6f,
+                speedMetersPerSecond = 6.0,
+                bearingDegrees = 0.0,
+            ),
+        )
+
+        assertNotNull(firstFix)
+        assertNotNull(recoveredFix)
+        assertTrue((recoveredFix?.point?.latitude ?: 0.0) > 40.418)
+    }
+
     private fun sample(
         latitude: Double,
         longitude: Double,

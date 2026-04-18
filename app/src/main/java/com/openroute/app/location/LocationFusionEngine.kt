@@ -47,6 +47,11 @@ internal class LocationFusionEngine {
     fun updateFromLocation(sample: LocationSample): FusedLocationUpdate? {
         val assessment = LocationSamplePolicy.assess(sample)
         if (!assessment.isAccepted) {
+            debugLog(
+                "Rejected sample by quality: provider=${sample.provider ?: "unknown"} " +
+                    "ageMs=${sample.receivedAtMillis - sample.capturedAtMillis} " +
+                    "accuracy=${sample.accuracyMeters ?: -1f} quality=${assessment.qualityScore}",
+            )
             return null
         }
 
@@ -59,13 +64,19 @@ internal class LocationFusionEngine {
         val rawPoint = LocationSamplePolicy.toPoint(sample)
         val predictedPoint = currentPredictedPointFor(sample)
 
-        if (!LocationSamplePolicy.isPlausibleAgainstHistory(
+        val plausibilityAssessment = LocationSamplePolicy.assessPlausibilityAgainstHistory(
                 sample = sample,
                 previousAcceptedPoint = lastAcceptedPoint,
                 previousAcceptedSample = lastAcceptedSample,
                 predictedPoint = predictedPoint,
             )
-        ) {
+        if (!plausibilityAssessment.isPlausible) {
+            warnLog(
+                "Rejected implausible sample: reason=${plausibilityAssessment.reason} " +
+                    "provider=${sample.provider ?: "unknown"} accuracy=${sample.accuracyMeters ?: -1f} " +
+                    "distance=${plausibilityAssessment.measuredDistanceMeters ?: -1.0} " +
+                    "limit=${plausibilityAssessment.limitMeters ?: -1.0}",
+            )
             return null
         }
 
@@ -392,7 +403,20 @@ internal class LocationFusionEngine {
 
     private fun Double.toRadians(): Double = this * PI / 180.0
 
+    private fun debugLog(message: String) {
+        runCatching {
+            android.util.Log.d(TAG, message)
+        }
+    }
+
+    private fun warnLog(message: String) {
+        runCatching {
+            android.util.Log.w(TAG, message)
+        }
+    }
+
     private companion object {
+        const val TAG = "OpenRouteLocation"
         const val EARTH_RADIUS_METERS = 6_371_000.0
         const val INITIAL_VELOCITY_VARIANCE_METERS_SQUARED = 64.0
         const val DEFAULT_VELOCITY_MEASUREMENT_VARIANCE_METERS_SQUARED = 4.0

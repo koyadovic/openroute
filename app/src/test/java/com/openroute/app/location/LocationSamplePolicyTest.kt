@@ -83,6 +83,38 @@ class LocationSamplePolicyTest {
     }
 
     @Test
+    fun `allows reacquiring a plausible fix after a prolonged gap`() {
+        val previousPoint = LatLngPoint(
+            latitude = 40.4168,
+            longitude = -3.7038,
+            timestampMillis = 10_000L,
+        )
+        val previousSample = sample(
+            latitude = 40.4168,
+            longitude = -3.7038,
+            capturedAtMillis = 10_000L,
+            receivedAtMillis = 10_500L,
+            accuracyMeters = 6f,
+        )
+        val recoveredFix = sample(
+            latitude = 40.4204,
+            longitude = -3.7038,
+            capturedAtMillis = 70_000L,
+            receivedAtMillis = 70_200L,
+            accuracyMeters = 6f,
+        )
+
+        assertTrue(
+            LocationSamplePolicy.isPlausibleAgainstHistory(
+                sample = recoveredFix,
+                previousAcceptedPoint = previousPoint,
+                previousAcceptedSample = previousSample,
+                predictedPoint = previousPoint,
+            ),
+        )
+    }
+
+    @Test
     fun `avoids appending tiny movement as recorded point`() {
         val previousPoint = LatLngPoint(
             latitude = 40.4168,

@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationAvailability
@@ -55,9 +56,10 @@ class TrackingService : Service() {
         super.onCreate()
         repository = RouteRepository(applicationContext)
         fusionRuntime = LocationFusionRuntime(applicationContext) { update ->
-            TrackingSessionStore.updateCurrentLocation(update.point)
-            if (update.shouldAppendTrackPoint) {
+            if (update.source == FusedLocationSource.Gnss) {
                 TrackingSessionStore.addPoint(update.point)
+            } else {
+                TrackingSessionStore.updateCurrentLocation(update.point)
             }
 
             if (update.source == FusedLocationSource.Gnss || update.shouldAppendTrackPoint) {
@@ -117,7 +119,11 @@ class TrackingService : Service() {
     }
 
     private fun handleLocationUpdateIntent(intent: Intent) {
-        LocationResult.extractResult(intent)
+        val locationResult = LocationResult.extractResult(intent)
+        if (locationResult == null) {
+            Log.d(TAG, "Tracking intent received without LocationResult payload")
+        }
+        locationResult
             ?.locations
             ?.sortedBy { location -> location.elapsedRealtimeNanos }
             ?.forEach(fusionRuntime::onLocationChanged)
@@ -125,6 +131,7 @@ class TrackingService : Service() {
         LocationAvailability.extractLocationAvailability(intent)
             ?.takeIf { availability -> !availability.isLocationAvailable }
             ?.let {
+                Log.w(TAG, "Location availability reported as unavailable during tracking")
                 updateNotification("Grabando ruta", "Se ha perdido señal temporalmente.")
             }
     }
@@ -235,6 +242,7 @@ class TrackingService : Service() {
     }
 
     companion object {
+        private const val TAG = "OpenRouteTracking"
         private const val CHANNEL_ID = "openroute_tracking"
         private const val NOTIFICATION_ID = 7
         private const val LOCATION_UPDATES_REQUEST_CODE = 701

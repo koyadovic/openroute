@@ -51,6 +51,13 @@ internal data class LocationSampleAssessment(
     val measurementSigmaMeters: Double,
 )
 
+internal data class LocationPlausibilityAssessment(
+    val isPlausible: Boolean,
+    val reason: String? = null,
+    val measuredDistanceMeters: Double? = null,
+    val limitMeters: Double? = null,
+)
+
 internal object LocationSamplePolicy {
     private const val MAX_SAMPLE_AGE_MILLIS = 15_000L
     private const val MAX_ACCEPTED_ACCURACY_METERS = 75.0
@@ -61,6 +68,7 @@ internal object LocationSamplePolicy {
     private const val MIN_VISITED_SEGMENT_TIME_MILLIS = 800L
     private const val MAX_REALISTIC_SPEED_METERS_PER_SECOND = 24.0
     private const val ABSOLUTE_OUTLIER_DISTANCE_METERS = 180.0
+    private const val PREDICTION_RECOVERY_AFTER_MILLIS = 20_000L
 
     fun toPoint(
         sample: LocationSample,
@@ -109,32 +117,73 @@ internal object LocationSamplePolicy {
         previousAcceptedSample: LocationSample?,
         predictedPoint: LatLngPoint?,
     ): Boolean {
+        return assessPlausibilityAgainstHistory(
+            sample = sample,
+            previousAcceptedPoint = previousAcceptedPoint,
+            previousAcceptedSample = previousAcceptedSample,
+            predictedPoint = predictedPoint,
+        ).isPlausible
+    }
+
+    fun assessPlausibilityAgainstHistory(
+        sample: LocationSample,
+        previousAcceptedPoint: LatLngPoint?,
+        previousAcceptedSample: LocationSample?,
+        predictedPoint: LatLngPoint?,
+    ): LocationPlausibilityAssessment {
         val rawPoint = toPoint(sample)
         val accuracyAllowanceMeters = max(
             sample.accuracyMeters?.toDouble()?.times(2.5) ?: DEFAULT_MEASUREMENT_SIGMA_METERS,
             14.0,
         )
+        val elapsedMillis = previousAcceptedSample
+            ?.let { acceptedSample -> (sample.capturedAtMillis - acceptedSample.capturedAtMillis).coerceAtLeast(0L) }
+            ?: 0L
+        val elapsedSeconds = elapsedMillis / 1000.0
 
         if (predictedPoint != null) {
             val innovationMeters = rawPoint.distanceTo(predictedPoint)
-            if (innovationMeters > max(ABSOLUTE_OUTLIER_DISTANCE_METERS, accuracyAllowanceMeters * 4.0)) {
-                return false
+            val predictionLimitMeters = if (elapsedMillis >= PREDICTION_RECOVERY_AFTER_MILLIS) {
+                max(
+                    max(ABSOLUTE_OUTLIER_DISTANCE_METERS, accuracyAllowanceMeters * 4.0),
+                    (MAX_REALISTIC_SPEED_METERS_PER_SECOND * elapsedSeconds) + accuracyAllowanceMeters,
+                )
+            } else {
+                max(ABSOLUTE_OUTLIER_DISTANCE_METERS, accuracyAllowanceMeters * 4.0)
+            }
+            if (innovationMeters > predictionLimitMeters) {
+                return LocationPlausibilityAssessment(
+                    isPlausible = false,
+                    reason = "prediction_outlier",
+                    measuredDistanceMeters = innovationMeters,
+                    limitMeters = predictionLimitMeters,
+                )
             }
         }
 
         if (previousAcceptedPoint == null || previousAcceptedSample == null) {
-            return true
+            return LocationPlausibilityAssessment(isPlausible = true)
         }
 
-        val elapsedSeconds = ((sample.capturedAtMillis - previousAcceptedSample.capturedAtMillis) / 1000.0)
-            .coerceAtLeast(0.0)
         if (elapsedSeconds <= 0.0) {
-            return false
+            return LocationPlausibilityAssessment(
+                isPlausible = false,
+                reason = "non_increasing_timestamp",
+            )
         }
 
         val travelledDistanceMeters = rawPoint.distanceTo(previousAcceptedPoint)
         val feasibleDistanceMeters = (MAX_REALISTIC_SPEED_METERS_PER_SECOND * elapsedSeconds) + accuracyAllowanceMeters
-        return travelledDistanceMeters <= feasibleDistanceMeters
+        if (travelledDistanceMeters > feasibleDistanceMeters) {
+            return LocationPlausibilityAssessment(
+                isPlausible = false,
+                reason = "history_speed_outlier",
+                measuredDistanceMeters = travelledDistanceMeters,
+                limitMeters = feasibleDistanceMeters,
+            )
+        }
+
+        return LocationPlausibilityAssessment(isPlausible = true)
     }
 
     fun shouldAppendTrackPoint(
