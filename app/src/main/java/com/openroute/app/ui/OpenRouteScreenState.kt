@@ -474,6 +474,8 @@ private fun RouteTrack.toNavigation3DState(
         routeId = id,
         title = name,
         subtitle = text.navigation3DSubtitle,
+        backLabel = text.navigationBackToDetail,
+        stopLabel = text.navigationStop,
         statusLabel = when {
             progress == null -> text.navigationWaitingLocation
             progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->

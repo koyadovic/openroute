@@ -12,7 +12,6 @@ import com.openroute.app.data.RouteRepository
 import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
 import com.openroute.app.data.distanceMeters
-import com.openroute.app.data.sortedByDistanceTo
 import com.openroute.app.location.BreadcrumbService
 import com.openroute.app.location.BreadcrumbSessionStore
 import com.openroute.app.location.BreadcrumbState
@@ -57,12 +56,12 @@ internal data class OpenRouteUiState(
     val visibleRoutes: List<RouteTrack>
         get() = routes
             .filterNot(RouteTrack::isHidden)
-            .sortedByDistanceTo(navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation)
+            .sortedByRouteName()
 
     val hiddenRoutes: List<RouteTrack>
         get() = routes
             .filter(RouteTrack::isHidden)
-            .sortedByDistanceTo(navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation)
+            .sortedByRouteName()
 
     val selectedRoute: RouteTrack?
         get() = visibleRoutes.firstOrNull { it.id == selectedRouteId } ?: visibleRoutes.firstOrNull()
@@ -574,6 +573,14 @@ private fun OpenRouteUiState.resolveLiveTrack(trackingState: TrackingState): Lis
         trackingState.isRecording -> trackingState.points
         else -> emptyList()
     }
+}
+
+private fun List<RouteTrack>.sortedByRouteName(): List<RouteTrack> {
+    return sortedWith(
+        compareBy<RouteTrack> { route -> route.name.lowercase() }
+            .thenBy { route -> route.name }
+            .thenBy { route -> route.id },
+    )
 }
 
 private fun com.openroute.app.data.DownloadsImportResult.toMessage(context: Context): String? {

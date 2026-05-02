@@ -238,10 +238,10 @@ class OpenRouteScreenStateTest {
     }
 
     @Test
-    fun `orders visible routes by proximity to current location`() {
-        val farRoute = RouteTrack(
-            id = "route-far",
-            name = "Far Ride",
+    fun `orders visible routes alphabetically by name`() {
+        val zetaRoute = RouteTrack(
+            id = "route-zeta",
+            name = "Zeta Ride",
             source = RouteSource.IMPORTED_GPX,
             createdAtMillis = 1_700_000_000_000,
             distanceMeters = 12_000.0,
@@ -250,9 +250,9 @@ class OpenRouteScreenStateTest {
                 LatLngPoint(40.51, -3.79),
             ),
         )
-        val nearRoute = RouteTrack(
-            id = "route-near",
-            name = "Near Ride",
+        val alphaRoute = RouteTrack(
+            id = "route-alpha",
+            name = "Alpha Ride",
             source = RouteSource.RECORDED,
             createdAtMillis = 1_700_000_100_000,
             distanceMeters = 3_200.0,
@@ -264,11 +264,11 @@ class OpenRouteScreenStateTest {
 
         val screenState = OpenRouteUiState(
             isLoading = false,
-            routes = listOf(farRoute, nearRoute),
+            routes = listOf(zetaRoute, alphaRoute),
             currentLocation = LatLngPoint(40.4168, -3.7038),
         ).toScreenState()
 
-        assertEquals(listOf("route-near", "route-far"), screenState.routeList.items.map { it.id })
+        assertEquals(listOf("route-alpha", "route-zeta"), screenState.routeList.items.map { it.id })
     }
 
     @Test
@@ -332,8 +332,8 @@ class OpenRouteScreenStateTest {
 
         assertEquals("No visible routes. You can review the 2 hidden ones.", screenState.routeList.emptyMessage)
         assertEquals("Hide hidden", screenState.routeList.hiddenRoutes?.toggleLabel)
-        assertEquals(listOf("hidden-recorded", "hidden-imported"), screenState.routeList.hiddenRoutes?.items?.map { it.id })
-        assertEquals(RouteBadge.Recording, screenState.routeList.hiddenRoutes?.items?.first()?.badge)
+        assertEquals(listOf("hidden-imported", "hidden-recorded"), screenState.routeList.hiddenRoutes?.items?.map { it.id })
+        assertEquals(RouteBadge.Imported, screenState.routeList.hiddenRoutes?.items?.first()?.badge)
         assertEquals("Delete hidden route", screenState.routeList.deleteDialog?.title)
         assertTrue(screenState.routeList.deleteDialog?.message?.contains("Hidden GPX") == true)
     }

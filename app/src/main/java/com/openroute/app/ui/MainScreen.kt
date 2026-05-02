@@ -16,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -993,16 +995,16 @@ private fun RouteDetailScreen(
             )
         }
 
-        RouteDetailActions(
-            state = state,
-            onHideRouteClick = onHideRouteClick,
-            onDeleteRouteClick = onDeleteRouteClick,
-        )
-
         NavigationCard(
             state = state.navigationState,
             onNavigationClick = onNavigationClick,
             onStopNavigationClick = onStopNavigationClick,
+        )
+
+        RouteDetailActions(
+            state = state,
+            onHideRouteClick = onHideRouteClick,
+            onDeleteRouteClick = onDeleteRouteClick,
         )
 
         state.renameDialog?.let { dialogState ->
@@ -1087,13 +1089,25 @@ private fun Navigation3DScreen(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedButton(onClick = onCloseClick) {
-                Text(state.backLabel)
+            OutlinedButton(
+                onClick = onCloseClick,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = state.backLabel,
+                    maxLines = 1,
+                )
             }
-            Button(onClick = onStopNavigationClick) {
-                Text(state.stopLabel)
+            Button(
+                onClick = onStopNavigationClick,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(
+                    text = state.stopLabel,
+                    maxLines = 1,
+                )
             }
         }
 
@@ -1343,6 +1357,9 @@ private fun RenameRouteDialog(
                 value = state.name,
                 onValueChange = onValueChange,
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Words,
+                ),
                 label = { Text(stringResource(R.string.route_rename_name)) },
             )
         },
