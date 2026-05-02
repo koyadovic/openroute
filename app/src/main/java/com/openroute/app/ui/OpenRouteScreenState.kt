@@ -27,14 +27,14 @@ enum class OpenRouteMainSection {
 }
 
 data class HeaderState(
-    val title: String = "OpenRoute",
-    val subtitle: String = "GPX local, mapa OSM y grabación de rutas",
+    val title: String = "",
+    val subtitle: String = "",
 )
 
 data class ActionBarState(
-    val importLabel: String = "Import GPX",
-    val trackLabel: String = "Start recording",
-    val breadcrumbLabel: String = "Migas de pan",
+    val importLabel: String = "",
+    val trackLabel: String = "",
+    val breadcrumbLabel: String = "",
     val isImportEnabled: Boolean = true,
     val showsImportProgress: Boolean = false,
     val isTracking: Boolean = false,
@@ -42,12 +42,10 @@ data class ActionBarState(
 )
 
 data class SummaryState(
-    val routesLabel: String = "Routes",
+    val routesLabel: String = "",
     val routesValue: String = "0",
-    val liveTrackLabel: String = "Live track",
-    val liveTrackValue: String = "off",
-    val selectedLabel: String = "Selected",
-    val selectedValue: String = "-",
+    val liveTrackLabel: String = "",
+    val liveTrackValue: String = "",
     val activeDurationLabel: String? = null,
     val activeDurationValue: String? = null,
 )
@@ -62,7 +60,6 @@ data class RouteListItemState(
     val title: String,
     val subtitle: String,
     val badge: RouteBadge,
-    val isSelected: Boolean,
     val showsNewBadge: Boolean = false,
 )
 
@@ -76,8 +73,8 @@ data class HiddenRouteListItemState(
 data class HiddenRouteDeleteDialogState(
     val title: String,
     val message: String,
-    val confirmLabel: String = "Eliminar",
-    val dismissLabel: String = "Cancelar",
+    val confirmLabel: String = "",
+    val dismissLabel: String = "",
 )
 
 data class HiddenRoutesState(
@@ -88,7 +85,7 @@ data class HiddenRoutesState(
 )
 
 data class RouteListState(
-    val emptyMessage: String = "Todavía no hay rutas. Importa un GPX o empieza a grabar.",
+    val emptyMessage: String = "",
     val items: List<RouteListItemState> = emptyList(),
     val hiddenRoutes: HiddenRoutesState? = null,
     val deleteDialog: HiddenRouteDeleteDialogState? = null,
@@ -105,29 +102,29 @@ data class RouteDetailState(
     val fileLabel: String? = null,
     val canHide: Boolean = true,
     val canDelete: Boolean = true,
-    val hideLabel: String = "Ocultar ruta",
-    val deleteLabel: String = "Eliminar ruta",
+    val hideLabel: String = "",
+    val deleteLabel: String = "",
     val canRename: Boolean = false,
-    val renameLabel: String = "Renombrar",
+    val renameLabel: String = "",
     val renameDialog: RouteRenameDialogState? = null,
     val deleteDialog: HiddenRouteDeleteDialogState? = null,
-    val backLabel: String = "Volver",
+    val backLabel: String = "",
     val navigationState: RouteDetailNavigationState = RouteDetailNavigationState(),
 )
 
 data class RouteRenameDialogState(
-    val title: String = "Renombrar ruta",
+    val title: String = "",
     val name: String,
-    val confirmLabel: String = "Guardar",
-    val dismissLabel: String = "Cancelar",
+    val confirmLabel: String = "",
+    val dismissLabel: String = "",
     val isConfirmEnabled: Boolean = true,
 )
 
 data class RouteDetailNavigationState(
     val isNavigating: Boolean = false,
-    val actionLabel: String = "Iniciar navegación",
+    val actionLabel: String = "",
     val secondaryActionLabel: String? = null,
-    val statusLabel: String = "Navegación inactiva",
+    val statusLabel: String = "",
     val progressLabel: String = "0%",
     val remainingLabel: String = "-",
     val etaLabel: String = "-",
@@ -139,8 +136,8 @@ data class Navigation3DState(
     val routeId: String,
     val title: String,
     val subtitle: String,
-    val backLabel: String = "Volver al detalle",
-    val stopLabel: String = "Detener navegación",
+    val backLabel: String = "",
+    val stopLabel: String = "",
     val statusLabel: String,
     val progressLabel: String,
     val remainingLabel: String,
@@ -170,6 +167,7 @@ data class OpenRouteScreenState(
 
 data class DrawerItemState(
     val section: OpenRouteMainSection,
+    val icon: String,
     val title: String,
     val subtitle: String,
     val isSelected: Boolean,
@@ -188,10 +186,11 @@ data class DownloadsBannerState(
     val isLoading: Boolean = false,
 )
 
-internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
+internal fun OpenRouteUiState.toScreenState(
+    text: OpenRouteTextProvider = EnglishOpenRouteTextProvider,
+): OpenRouteScreenState {
     val visibleRoutes = visibleRoutes
     val hiddenRoutes = hiddenRoutes
-    val selectedRoute = selectedRoute
     val detailRoute = detailRoute
     val navigation3DRoute = navigation3DRoute
     val effectiveCurrentLocation = navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation
@@ -212,11 +211,6 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             includeCurrentLocation = true,
         )
 
-        mainSection == OpenRouteMainSection.Routes && selectedRoute != null -> MapFocusState(
-            routeId = selectedRoute.id,
-            includeCurrentLocation = effectiveCurrentLocation != null,
-        )
-
         effectiveLiveTrack.isNotEmpty() -> MapFocusState(
             includeCurrentLocation = true,
         )
@@ -234,12 +228,14 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
     val routeNavigation3DState = navigation3DRoute
         ?.takeIf { navigationState.isActiveFor(it.id) }
         ?.toNavigation3DState(
+            text = text,
             progress = navigationProgress,
             currentLocation = navigationState.currentLocation,
         )
     val activeDurationValue = activeDurationMillis()?.toActiveDurationLabel()
-    val activeDurationLabel = activeDurationLabel().takeIf { activeDurationValue != null }
+    val activeDurationLabel = activeDurationLabel(text).takeIf { activeDurationValue != null }
     val navigation3DState = breadcrumbState.toNavigation3DState(
+        text = text,
         activeDurationLabel = activeDurationLabel.takeIf { breadcrumbState.isActive },
         activeDurationValue = activeDurationValue.takeIf { breadcrumbState.isActive },
     ) ?: routeNavigation3DState
@@ -260,26 +256,25 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
 
             detailRoute != null -> HeaderState(
                 title = detailRoute.name,
-                subtitle = detailRoute.metricsSubtitle(),
+                subtitle = detailRoute.metricsSubtitle(text),
             )
 
             mainSection == OpenRouteMainSection.Routes -> HeaderState(
-                title = "Rutas",
-                subtitle = "${visibleRoutes.size} visibles · ${hiddenRoutes.size} ocultas",
+                title = text.routes,
+                subtitle = text.routesHeaderSubtitle(visibleRoutes.size, hiddenRoutes.size),
             )
 
             mainSection == OpenRouteMainSection.Recording -> HeaderState(
-                title = "Grabar ruta",
-                subtitle = if (isTracking) "Grabando recorrido local" else "Registra una ruta nueva",
+                title = text.recordingTitle,
+                subtitle = text.recordingSubtitle(isTracking),
             )
 
             mainSection == OpenRouteMainSection.Breadcrumbs -> HeaderState(
-                title = "Migas de pan",
-                subtitle = when {
-                    breadcrumbState.isReturning -> "Volviendo al inicio"
-                    breadcrumbState.isActive -> "Sembrando rastro"
-                    else -> "Deja un rastro para volver"
-                },
+                title = text.breadcrumbs,
+                subtitle = text.breadcrumbsSubtitle(
+                    isReturning = breadcrumbState.isReturning,
+                    isActive = breadcrumbState.isActive,
+                ),
             )
 
             else -> HeaderState()
@@ -288,13 +283,14 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             isImportEnabled = !isImporting,
             showsImportProgress = isImporting,
             isTracking = isTracking,
-            trackLabel = if (isTracking) "Stop recording" else "Start recording",
+            trackLabel = if (isTracking) text.stopRecording else text.startRecording,
             isBreadcrumbing = breadcrumbState.isActive,
             breadcrumbLabel = when {
-                breadcrumbState.isReturning -> "Volviendo"
-                breadcrumbState.isActive -> "Parar migas"
-                else -> "Migas de pan"
+                breadcrumbState.isReturning -> text.breadcrumbsReturning
+                breadcrumbState.isActive -> text.breadcrumbsStop
+                else -> text.breadcrumbs
             },
+            importLabel = text.importGpx,
         ),
         isLoading = isLoading,
         isSyncingDownloads = isSyncingDownloads,
@@ -313,47 +309,39 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             focus = mapFocus,
         ),
         summary = SummaryState(
+            routesLabel = text.routes,
             routesValue = visibleRoutes.size.toString(),
+            liveTrackLabel = text.liveTrack,
             liveTrackValue = if (navigationState.isNavigating || effectiveLiveTrack.isNotEmpty()) {
                 effectiveLiveTrack.size.toString()
             } else {
-                "off"
+                text.off
             },
-            selectedValue = selectedRoute?.distanceMeters.toDistanceLabel(),
             activeDurationLabel = activeDurationLabel,
             activeDurationValue = activeDurationValue,
         ),
         routeList = RouteListState(
-            emptyMessage = if (hiddenRoutes.isNotEmpty()) {
-                "No hay rutas visibles. Puedes revisar las ${hiddenRoutes.size} ocultas."
-            } else {
-                "Todavía no hay rutas. Importa un GPX o empieza a grabar."
-            },
+            emptyMessage = text.routesEmpty(hiddenRoutes.size),
             items = visibleRoutes.map { route ->
                 RouteListItemState(
                     id = route.id,
                     title = route.name,
-                    subtitle = route.metricsSubtitle(),
+                    subtitle = route.metricsSubtitle(text),
                     badge = if (route.source == RouteSource.RECORDED) RouteBadge.Recording else RouteBadge.Imported,
-                    isSelected = route.id == selectedRouteId,
                     showsNewBadge = route.source == RouteSource.IMPORTED_GPX && route.isNew,
                 )
             },
             hiddenRoutes = hiddenRoutes.takeIf { it.isNotEmpty() }?.let { routes ->
                 HiddenRoutesState(
                     countLabel = "${routes.size}",
-                    toggleLabel = if (showsHiddenRoutes) {
-                        "Ocultar ocultas"
-                    } else {
-                        "Mostrar ocultas"
-                    },
+                    toggleLabel = text.hiddenRoutesToggle(showsHiddenRoutes),
                     isExpanded = showsHiddenRoutes,
                     items = if (showsHiddenRoutes) {
                         routes.map { route ->
                             HiddenRouteListItemState(
                                 id = route.id,
                                 title = route.name,
-                                subtitle = route.metricsSubtitle(),
+                                subtitle = route.metricsSubtitle(text),
                                 badge = if (route.source == RouteSource.RECORDED) {
                                     RouteBadge.Recording
                                 } else {
@@ -368,67 +356,48 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             },
             deleteDialog = routePendingDeletion?.let { route ->
                 HiddenRouteDeleteDialogState(
-                    title = if (route.isHidden) "Eliminar ruta oculta" else "Eliminar ruta",
-                    message = "Se borrará \"${route.name}\" de OpenRoute.",
+                    title = text.routeDeleteTitle(route.isHidden),
+                    message = text.routeDeleteMessage(route.name),
+                    confirmLabel = text.delete,
+                    dismissLabel = text.cancel,
                 )
             },
         ),
         detailState = detailRoute?.toDetailState(
+            text = text,
             isNavigating = navigationState.isActiveFor(detailRoute.id),
             progress = navigationState.progressFor(detailRoute.id),
             renameDraft = renameDraft.takeIf { renameRouteId == detailRoute.id },
             routePendingDeletion = routePendingDeletion,
         ),
         navigation3DState = navigation3DState,
-        drawerItems = mainSection.toDrawerItems(),
+        drawerItems = text.drawerItems(mainSection),
         snackbarMessage = message,
-    )
-}
-
-private fun OpenRouteMainSection.toDrawerItems(): List<DrawerItemState> {
-    return listOf(
-        DrawerItemState(
-            section = OpenRouteMainSection.Routes,
-            title = "Rutas",
-            subtitle = "Visualiza, importa y gestiona rutas",
-            isSelected = this == OpenRouteMainSection.Routes,
-        ),
-        DrawerItemState(
-            section = OpenRouteMainSection.Recording,
-            title = "Grabar ruta",
-            subtitle = "Registra una nueva salida",
-            isSelected = this == OpenRouteMainSection.Recording,
-        ),
-        DrawerItemState(
-            section = OpenRouteMainSection.Breadcrumbs,
-            title = "Migas de pan",
-            subtitle = "Deja rastro para volver",
-            isSelected = this == OpenRouteMainSection.Breadcrumbs,
-        ),
     )
 }
 
 internal fun resolveDownloadsBannerState(
     isSyncingDownloads: Boolean,
     accessPresentation: DownloadsAccessPresentation,
+    text: OpenRouteTextProvider = EnglishOpenRouteTextProvider,
 ): DownloadsBannerState? {
     return when {
         isSyncingDownloads -> DownloadsBannerState(
-            title = "Descargas",
-            message = "Buscando archivos GPX nuevos en Descargas...",
+            title = text.downloadsTitle,
+            message = text.downloadsScanning,
             isLoading = true,
         )
 
         accessPresentation == DownloadsAccessPresentation.NeedsAllFilesAccess -> DownloadsBannerState(
-            title = "Autoimportar Descargas",
-            message = "Permite acceso a Descargas para importar GPX automaticamente al abrir la app.",
-            actionLabel = "Permitir acceso",
+            title = text.downloadsAutoImportTitle,
+            message = text.downloadsAllFilesMessage,
+            actionLabel = text.downloadsAllowAccess,
         )
 
         accessPresentation == DownloadsAccessPresentation.NeedsPermission -> DownloadsBannerState(
-            title = "Autoimportar Descargas",
-            message = "Permite lectura de almacenamiento para importar GPX descargados al abrir la app.",
-            actionLabel = "Dar permiso",
+            title = text.downloadsAutoImportTitle,
+            message = text.downloadsStorageMessage,
+            actionLabel = text.downloadsGrantPermission,
         )
 
         else -> null
@@ -436,6 +405,7 @@ internal fun resolveDownloadsBannerState(
 }
 
 private fun RouteTrack.toDetailState(
+    text: OpenRouteTextProvider,
     isNavigating: Boolean,
     progress: RouteNavigationProgress?,
     renameDraft: String?,
@@ -444,7 +414,7 @@ private fun RouteTrack.toDetailState(
     return RouteDetailState(
         routeId = id,
         title = name,
-        subtitle = if (source == RouteSource.RECORDED) "Ruta grabada localmente" else "Ruta importada desde GPX",
+        subtitle = if (source == RouteSource.RECORDED) text.routeSourceRecorded else text.routeSourceImported,
         distanceLabel = distanceMeters.toDistanceLabel(),
         durationLabel = effectiveDurationMillis.toDurationLabel(),
         pointsLabel = points.size.toString(),
@@ -452,29 +422,38 @@ private fun RouteTrack.toDetailState(
         fileLabel = originalFileName,
         canHide = !isHidden,
         canDelete = true,
+        hideLabel = text.routeHide,
+        deleteLabel = text.routeDelete,
         canRename = source == RouteSource.RECORDED,
+        renameLabel = text.routeRename,
         renameDialog = renameDraft?.takeIf { source == RouteSource.RECORDED }?.let { draft ->
             RouteRenameDialogState(
+                title = text.routeRenameTitle,
                 name = draft,
+                confirmLabel = text.save,
+                dismissLabel = text.cancel,
                 isConfirmEnabled = draft.trim().isNotEmpty(),
             )
         },
         deleteDialog = routePendingDeletion?.takeIf { it.id == id }?.let { route ->
             HiddenRouteDeleteDialogState(
-                title = if (route.isHidden) "Eliminar ruta oculta" else "Eliminar ruta",
-                message = "Se borrará \"${route.name}\" de OpenRoute.",
+                title = text.routeDeleteTitle(route.isHidden),
+                message = text.routeDeleteMessage(route.name),
+                confirmLabel = text.delete,
+                dismissLabel = text.cancel,
             )
         },
+        backLabel = text.back,
         navigationState = RouteDetailNavigationState(
             isNavigating = isNavigating,
-            actionLabel = if (isNavigating) "Abrir guía 3D" else "Iniciar navegación",
-            secondaryActionLabel = if (isNavigating) "Detener navegación" else null,
+            actionLabel = if (isNavigating) text.navigationOpen3D else text.navigationStart,
+            secondaryActionLabel = if (isNavigating) text.navigationStop else null,
             statusLabel = when {
-                isNavigating && progress == null -> "Esperando posición..."
-                progress == null -> "Navegación inactiva"
+                isNavigating && progress == null -> text.navigationWaitingLocation
+                progress == null -> text.navigationInactive
                 progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->
-                    "Fuera de ruta (${progress.distanceToRouteMeters.toDistanceLabel()})"
-                else -> "Siguiendo ruta"
+                    text.navigationOffRoute(progress.distanceToRouteMeters.toDistanceLabel())
+                else -> text.navigationFollowingRoute
             },
             progressLabel = progress?.completionRatio?.toPercentLabel() ?: "0%",
             remainingLabel = progress?.remainingDistanceMeters.toDistanceLabel(),
@@ -486,6 +465,7 @@ private fun RouteTrack.toDetailState(
 }
 
 private fun RouteTrack.toNavigation3DState(
+    text: OpenRouteTextProvider,
     progress: RouteNavigationProgress?,
     currentLocation: com.openroute.app.data.LatLngPoint?,
 ): Navigation3DState {
@@ -495,12 +475,12 @@ private fun RouteTrack.toNavigation3DState(
     return Navigation3DState(
         routeId = id,
         title = name,
-        subtitle = "Guía 3D aproximada",
+        subtitle = text.navigation3DSubtitle,
         statusLabel = when {
-            progress == null -> "Esperando posición..."
+            progress == null -> text.navigationWaitingLocation
             progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->
-                "Fuera de ruta (${progress.distanceToRouteMeters.toDistanceLabel()})"
-            else -> "Siguiendo ruta"
+                text.navigationOffRoute(progress.distanceToRouteMeters.toDistanceLabel())
+            else -> text.navigationFollowingRoute
         },
         progressLabel = progress?.completionRatio?.toPercentLabel() ?: "0%",
         remainingLabel = progress?.remainingDistanceMeters.toDistanceLabel(),
@@ -525,6 +505,7 @@ private fun RouteTrack.toNavigation3DState(
 }
 
 private fun BreadcrumbState.toNavigation3DState(
+    text: OpenRouteTextProvider,
     activeDurationLabel: String?,
     activeDurationValue: String?,
 ): Navigation3DState? {
@@ -535,18 +516,19 @@ private fun BreadcrumbState.toNavigation3DState(
     val breadcrumbRoute = route ?: return null
     val current = progress?.displayLocation ?: currentLocation
     return breadcrumbRoute.toNavigation3DState(
+        text = text,
         progress = progress,
         currentLocation = current,
     ).copy(
-        title = "Migas de pan",
-        subtitle = "Volviendo al inicio",
-        backLabel = "Detener migas",
-        stopLabel = "Detener migas",
+        title = text.breadcrumbsRouteName,
+        subtitle = text.breadcrumbsSubtitleReturning,
+        backLabel = text.breadcrumbsStopShort,
+        stopLabel = text.breadcrumbsStopShort,
         statusLabel = when {
-            progress == null -> "Esperando posición..."
+            progress == null -> text.navigationWaitingLocation
             progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->
-                "Fuera del rastro (${progress.distanceToRouteMeters.toDistanceLabel()})"
-            else -> "Volviendo por tus migas"
+                text.breadcrumbsOffTrail(progress.distanceToRouteMeters.toDistanceLabel())
+            else -> text.breadcrumbsStatusReturning
         },
         isBreadcrumb = true,
         activeDurationLabel = activeDurationLabel,
@@ -554,10 +536,10 @@ private fun BreadcrumbState.toNavigation3DState(
     )
 }
 
-private fun OpenRouteUiState.activeDurationLabel(): String? {
+private fun OpenRouteUiState.activeDurationLabel(text: OpenRouteTextProvider): String? {
     return when {
-        isTracking -> "Tiempo grabando"
-        breadcrumbState.isActive -> "Tiempo migas"
+        isTracking -> text.recordingDurationLabel
+        breadcrumbState.isActive -> text.breadcrumbsDurationLabel
         else -> null
     }
 }
@@ -586,11 +568,11 @@ private val RouteSource.defaultColor: String
         RouteSource.RECORDED -> "#697380"
     }
 
-private fun RouteTrack.metricsSubtitle(): String {
+private fun RouteTrack.metricsSubtitle(text: OpenRouteTextProvider): String {
     return buildList {
         add(distanceMeters.toDistanceLabel())
         effectiveDurationMillis?.let { add(it.toDurationLabel()) }
-        add("${points.size} puntos")
+        add(text.routePoints(points.size))
     }.joinToString(" · ")
 }
 

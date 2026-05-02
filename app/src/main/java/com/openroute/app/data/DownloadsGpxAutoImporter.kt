@@ -62,10 +62,7 @@ class DownloadsGpxAutoImporter(
 }
 
 private fun ImportedTrack.resolveRouteName(file: File): String {
-    return name.takeUnless { it == DEFAULT_IMPORTED_ROUTE_NAME } ?: file.nameWithoutExtension
-        .replace('_', ' ')
+    return name.takeIf { hasExplicitName } ?: file.nameWithoutExtension.replace('_', ' ')
 }
 
 private fun File.toImportReference(): String = "$absolutePath::${length()}::${lastModified()}"
-
-private const val DEFAULT_IMPORTED_ROUTE_NAME = "Imported GPX"

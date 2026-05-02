@@ -22,8 +22,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.openroute.app.R
 import com.openroute.app.data.LatLngPoint
 import com.openroute.app.data.Navigation3DRenderState
 import kotlinx.coroutines.coroutineScope
@@ -140,10 +142,12 @@ fun Navigation3DCanvas(
         longitude = animatedLongitude.value.toDouble(),
     )
     val animatedHeadingDegrees = animatedHeading.value.toDouble().normalizeHeadingDegrees()
-    val message = remember(state) {
+    val waitingLocationMessage = stringResource(R.string.navigation_waiting_location)
+    val notEnoughRouteMessage = stringResource(R.string.navigation_3d_not_enough_route)
+    val message = remember(state, waitingLocationMessage, notEnoughRouteMessage) {
         when {
-            state.currentLocation == null -> "Esperando posición..."
-            state.routePoints.size < 2 -> "No hay suficiente ruta para guiado 3D."
+            state.currentLocation == null -> waitingLocationMessage
+            state.routePoints.size < 2 -> notEnoughRouteMessage
             else -> null
         }
     }

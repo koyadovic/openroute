@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.openroute.app.R
 import com.openroute.app.data.DownloadsGpxAutoImporter
 import com.openroute.app.data.GpxImporter
 import com.openroute.app.data.RouteRepository
@@ -77,18 +78,20 @@ internal data class OpenRouteUiState(
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
+    private val app = application
     private val repository = RouteRepository(application)
-    private val importer = GpxImporter(application.contentResolver)
+    private val textProvider = AndroidOpenRouteTextProvider(application)
+    private val importer = GpxImporter(application.contentResolver, application)
     private val downloadsAutoImporter = DownloadsGpxAutoImporter(importer)
     private val lastKnownLocationReader = LastKnownLocationReader(application)
 
     private val _uiState = MutableStateFlow(OpenRouteUiState())
     val screenState = _uiState
-        .map(OpenRouteUiState::toScreenState)
+        .map { state -> state.toScreenState(textProvider) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = OpenRouteUiState().toScreenState(),
+            initialValue = OpenRouteUiState().toScreenState(textProvider),
         )
 
     init {
@@ -157,7 +160,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     current.copy(
                         routes = listOf(route) + current.routes.filterNot { it.id == route.id },
                         selectedRouteId = route.id,
-                        message = "Ruta guardada: ${route.name}",
+                        message = app.getString(R.string.message_route_saved, route.name),
                     )
                 }
             }
@@ -218,14 +221,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         selectedRouteId = route.id,
                         detailRouteId = current.detailRouteId,
                         navigation3DRouteId = current.navigation3DRouteId,
-                        message = "Importado ${route.name}",
+                        message = app.getString(R.string.message_route_imported, route.name),
                     )
                 }
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(
                         isImporting = false,
-                        message = error.message ?: "No se pudo importar el GPX.",
+                        message = error.message ?: app.getString(R.string.message_import_failed),
                     )
                 }
             }
@@ -314,7 +317,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         ?.takeIf { detailId -> routes.any { route -> route.id == detailId } },
                     navigation3DRouteId = current.navigation3DRouteId
                         ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
-                    message = importResult.toMessage(),
+                    message = importResult.toMessage(app),
                 )
             }
         }
@@ -354,7 +357,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         ?.takeIf { detailId -> detailId != routeId && routes.any { route -> route.id == detailId && !route.isHidden } },
                     navigation3DRouteId = current.navigation3DRouteId
                         ?.takeIf { sceneId -> sceneId != routeId && routes.any { route -> route.id == sceneId && !route.isHidden } },
-                    message = "Ruta oculta: ${hiddenRoute.name}",
+                    message = app.getString(R.string.message_route_hidden, hiddenRoute.name),
                 )
             }
         }
@@ -405,7 +408,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
                     showsHiddenRoutes = current.showsHiddenRoutes && routes.any(RouteTrack::isHidden),
                     deleteRouteId = null,
-                    message = "Ruta eliminada: ${deletedRoute.name}",
+                    message = app.getString(R.string.message_route_deleted, deletedRoute.name),
                 )
             }
         }
@@ -519,7 +522,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val routeId = currentState.renameRouteId ?: return
         val newName = currentState.renameDraft.trim()
         if (newName.isEmpty()) {
-            showMessage("El nombre no puede estar vacío.")
+            showMessage(getApplication<Application>().getString(R.string.route_rename_empty))
             return
         }
 
@@ -537,7 +540,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     },
                     renameRouteId = null,
                     renameDraft = "",
-                    message = "Ruta renombrada: ${renamedRoute.name}",
+                    message = getApplication<Application>().getString(R.string.message_route_renamed, renamedRoute.name),
                 )
             }
         }
@@ -573,16 +576,16 @@ private fun OpenRouteUiState.resolveLiveTrack(trackingState: TrackingState): Lis
     }
 }
 
-private fun com.openroute.app.data.DownloadsImportResult.toMessage(): String? {
+private fun com.openroute.app.data.DownloadsImportResult.toMessage(context: Context): String? {
     return when {
         importedRoutes.isNotEmpty() && failedFiles > 0 ->
-            "Importados ${importedRoutes.size} GPX. $failedFiles no se pudieron leer."
+            context.getString(R.string.message_downloads_imported_with_failures, importedRoutes.size, failedFiles)
 
         importedRoutes.isNotEmpty() ->
-            "Importados ${importedRoutes.size} GPX desde Descargas."
+            context.getString(R.string.message_downloads_imported, importedRoutes.size)
 
         failedFiles > 0 ->
-            "$failedFiles GPX de Descargas no se pudieron leer."
+            context.getString(R.string.message_downloads_failed, failedFiles)
 
         else -> null
     }

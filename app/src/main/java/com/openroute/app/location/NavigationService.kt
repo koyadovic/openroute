@@ -21,6 +21,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.openroute.app.MainActivity
+import com.openroute.app.R
 
 class NavigationService : Service() {
     private lateinit var fusionRuntime: LocationFusionRuntime
@@ -48,15 +49,19 @@ class NavigationService : Service() {
 
             if (update.source == FusedLocationSource.Gnss || update.shouldAppendVisitedPoint) {
                 val navigationState = NavigationSessionStore.state.value
-                val routeName = navigationState.route?.name ?: "Ruta"
+                val routeName = navigationState.route?.name ?: getString(R.string.navigation_default_route)
                 val progress = navigationState.progress
 
                 updateNotification(
-                    title = "Navegando $routeName",
+                    title = getString(R.string.navigation_notification_title, routeName),
                     text = if (progress != null) {
-                        "${(progress.completionRatio * 100).toInt()}% · ${progress.remainingDistanceMeters.toDistanceLabel()} restantes"
+                        getString(
+                            R.string.navigation_notification_text,
+                            (progress.completionRatio * 100).toInt(),
+                            progress.remainingDistanceMeters.toDistanceLabel(),
+                        )
                     } else {
-                        "Esperando posicion…"
+                        getString(R.string.navigation_waiting_location)
                     },
                 )
             }
@@ -94,7 +99,13 @@ class NavigationService : Service() {
             return
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("Navegacion activa", "Esperando posicion…"))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(
+                getString(R.string.navigation_active),
+                getString(R.string.navigation_waiting_location),
+            ),
+        )
         fusionRuntime.reset()
         fusionRuntime.start()
 
@@ -104,7 +115,10 @@ class NavigationService : Service() {
                 locationUpdatesPendingIntent,
             )
             .addOnFailureListener {
-                updateNotification("Navegacion activa", "No se pudo activar la localización.")
+                updateNotification(
+                    getString(R.string.navigation_active),
+                    getString(R.string.tracking_activation_failed),
+                )
                 finalizeAndStop()
             }
 
@@ -120,7 +134,10 @@ class NavigationService : Service() {
         LocationAvailability.extractLocationAvailability(intent)
             ?.takeIf { availability -> !availability.isLocationAvailable }
             ?.let {
-                updateNotification("Navegacion activa", "Se ha perdido señal temporalmente.")
+                updateNotification(
+                    getString(R.string.navigation_active),
+                    getString(R.string.tracking_signal_lost),
+                )
             }
     }
 
@@ -167,7 +184,7 @@ class NavigationService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "OpenRoute navigation",
+            getString(R.string.navigation_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         )
         manager.createNotificationChannel(channel)

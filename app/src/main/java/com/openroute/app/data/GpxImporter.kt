@@ -1,8 +1,10 @@
 package com.openroute.app.data
 
 import android.content.ContentResolver
+import android.content.Context
 import android.net.Uri
 import android.util.Xml
+import com.openroute.app.R
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,15 +12,17 @@ import org.xmlpull.v1.XmlPullParser
 
 data class ImportedTrack(
     val name: String,
+    val hasExplicitName: Boolean,
     val points: List<LatLngPoint>,
 )
 
 class GpxImporter(
     private val contentResolver: ContentResolver,
+    private val context: Context,
 ) {
     suspend fun import(uri: Uri): ImportedTrack = withContext(Dispatchers.IO) {
         contentResolver.openInputStream(uri)?.use(::parseTrack)
-            ?: error("No se pudo abrir el archivo GPX.")
+            ?: error(context.getString(R.string.gpx_open_failed))
     }
 
     suspend fun import(file: File): ImportedTrack = withContext(Dispatchers.IO) {
@@ -60,11 +64,12 @@ class GpxImporter(
         }
 
         require(points.size >= 2) {
-            "El archivo GPX no contiene suficientes puntos de ruta."
+            context.getString(R.string.gpx_not_enough_points)
         }
 
         return ImportedTrack(
-            name = discoveredName ?: "Imported GPX",
+            name = discoveredName ?: context.getString(R.string.default_imported_route_name),
+            hasExplicitName = discoveredName != null,
             points = points.toList(),
         )
     }

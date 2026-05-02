@@ -1,0 +1,150 @@
+<resources>
+    <string name="app_name">OpenRoute</string>
+    <string name="app_subtitle">GPX local, mapa OSM y grabación de rutas</string>
+    <string name="menu">Menú</string>
+    <string name="local_navigation">Navegación local</string>
+    <string name="version_label">Versión %1$s (%2$d)</string>
+    <string name="version_unknown">Versión desconocida</string>
+
+    <string name="routes_title">Rutas</string>
+    <string name="routes_header_subtitle">%1$d visibles · %2$d ocultas</string>
+    <string name="routes_empty">Todavía no hay rutas. Importa un GPX o empieza a grabar.</string>
+    <string name="routes_empty_with_hidden">No hay rutas visibles. Puedes revisar las %1$d ocultas.</string>
+    <string name="routes_drawer_subtitle">Visualiza, importa y gestiona rutas</string>
+    <string name="import_gpx">Importar GPX</string>
+    <string name="hidden_routes_title">Rutas ocultas</string>
+    <string name="hidden_routes_count">%1$s guardadas fuera de la vista principal</string>
+    <string name="hidden_routes_show">Mostrar ocultas</string>
+    <string name="hidden_routes_hide">Ocultar ocultas</string>
+    <string name="show">Mostrar</string>
+    <string name="hide">Ocultar</string>
+    <string name="tap_here">Toca aquí</string>
+    <string name="new_badge">Nueva</string>
+
+    <string name="recording_title">Grabar ruta</string>
+    <string name="recording_subtitle_active">Grabando recorrido local</string>
+    <string name="recording_subtitle_idle">Registra una ruta nueva</string>
+    <string name="recording_drawer_subtitle">Registra una nueva salida</string>
+    <string name="start_recording">Iniciar grabación</string>
+    <string name="stop_recording">Detener grabación</string>
+    <string name="recording_info_active">Grabando ruta localmente. Puedes bloquear la pantalla si la ubicación está en Permitir siempre y la batería sin restricciones.</string>
+    <string name="recording_info_idle">Inicia una grabación para guardar una ruta nueva con distancia, tiempo y puntos registrados.</string>
+    <string name="recording_duration_label">Tiempo grabando</string>
+
+    <string name="breadcrumbs_title">Migas de pan</string>
+    <string name="breadcrumbs_drawer_subtitle">Deja rastro para volver</string>
+    <string name="breadcrumbs_subtitle_returning">Volviendo al inicio</string>
+    <string name="breadcrumbs_subtitle_active">Sembrando rastro</string>
+    <string name="breadcrumbs_subtitle_idle">Deja un rastro para volver</string>
+    <string name="breadcrumbs_start">Migas de pan</string>
+    <string name="breadcrumbs_stop">Parar migas</string>
+    <string name="breadcrumbs_returning">Volviendo</string>
+    <string name="breadcrumbs_stop_short">Detener migas</string>
+    <string name="breadcrumbs_info_active">Sembrando migas. Si te das la vuelta, la app cambiará a guía 3D para volver al punto inicial.</string>
+    <string name="breadcrumbs_info_idle">Este modo guarda tu rastro temporalmente para poder volver por donde viniste sin crear una ruta guardada.</string>
+    <string name="breadcrumbs_duration_label">Tiempo migas</string>
+    <string name="breadcrumbs_route_name">Migas de pan</string>
+    <string name="breadcrumbs_status_returning">Volviendo por tus migas</string>
+    <string name="breadcrumbs_status_off_route">Fuera del rastro (%1$s)</string>
+    <string name="breadcrumbs_distance_to_start">%1$s al inicio</string>
+    <string name="breadcrumbs_channel_name">OpenRoute migas</string>
+    <string name="breadcrumbs_notification_seeding">Sembrando migas</string>
+
+    <string name="summary_routes">Rutas</string>
+    <string name="summary_live_track">Rastro actual</string>
+    <string name="summary_off">apagado</string>
+    <string name="summary_none">-</string>
+
+    <string name="route_source_recorded">Ruta grabada localmente</string>
+    <string name="route_source_imported">Ruta importada desde GPX</string>
+    <string name="route_points_count">%1$d puntos</string>
+    <string name="route_file_label">Archivo: %1$s</string>
+    <string name="route_hide">Ocultar ruta</string>
+    <string name="route_delete">Eliminar ruta</string>
+    <string name="route_delete_title">Eliminar ruta</string>
+    <string name="route_delete_hidden_title">Eliminar ruta oculta</string>
+    <string name="route_delete_message">Se borrará "%1$s" de OpenRoute.</string>
+    <string name="route_rename">Renombrar</string>
+    <string name="route_rename_title">Renombrar ruta</string>
+    <string name="route_rename_name">Nombre</string>
+    <string name="route_rename_empty">El nombre no puede estar vacío.</string>
+    <string name="back">Volver</string>
+    <string name="save">Guardar</string>
+    <string name="delete">Eliminar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="continue_action">Continuar</string>
+
+    <string name="distance_label">Distancia</string>
+    <string name="duration_label">Duración</string>
+    <string name="points_label">Puntos</string>
+    <string name="source_label">Origen</string>
+    <string name="progress_label">Progreso</string>
+    <string name="remaining_label">Restante</string>
+    <string name="eta_label">ETA</string>
+    <string name="to_route_label">A ruta</string>
+
+    <string name="navigation_title">Navegación</string>
+    <string name="navigation_start">Iniciar navegación</string>
+    <string name="navigation_open_3d">Abrir guía 3D</string>
+    <string name="navigation_stop">Detener navegación</string>
+    <string name="navigation_inactive">Navegación inactiva</string>
+    <string name="navigation_waiting_location">Esperando posición...</string>
+    <string name="navigation_following_route">Siguiendo ruta</string>
+    <string name="navigation_off_route">Fuera de ruta (%1$s)</string>
+    <string name="navigation_3d_subtitle">Guía 3D aproximada</string>
+    <string name="navigation_back_to_detail">Volver al detalle</string>
+    <string name="navigation_active">Navegación activa</string>
+    <string name="navigation_channel_name">OpenRoute navegación</string>
+    <string name="navigation_notification_title">Navegando %1$s</string>
+    <string name="navigation_notification_text">%1$d%% · %2$s restantes</string>
+    <string name="navigation_default_route">Ruta</string>
+    <string name="navigation_3d_not_enough_route">No hay suficiente ruta para guiado 3D.</string>
+
+    <string name="downloads_title">Descargas</string>
+    <string name="downloads_scanning">Buscando archivos GPX nuevos en Descargas...</string>
+    <string name="downloads_auto_import_title">Autoimportar Descargas</string>
+    <string name="downloads_all_files_message">Permite acceso a Descargas para importar GPX automáticamente al abrir la app.</string>
+    <string name="downloads_storage_message">Permite lectura de almacenamiento para importar GPX descargados al abrir la app.</string>
+    <string name="downloads_allow_access">Permitir acceso</string>
+    <string name="downloads_grant_permission">Dar permiso</string>
+
+    <string name="message_route_saved">Ruta guardada: %1$s</string>
+    <string name="message_route_imported">Importado %1$s</string>
+    <string name="message_import_failed">No se pudo importar el GPX.</string>
+    <string name="message_route_hidden">Ruta oculta: %1$s</string>
+    <string name="message_route_deleted">Ruta eliminada: %1$s</string>
+    <string name="message_route_renamed">Ruta renombrada: %1$s</string>
+    <string name="message_downloads_imported_with_failures">Importados %1$d GPX. %2$d no se pudieron leer.</string>
+    <string name="message_downloads_imported">Importados %1$d GPX desde Descargas.</string>
+    <string name="message_downloads_failed">%1$d GPX de Descargas no se pudieron leer.</string>
+    <string name="message_battery_unrestricted_hint">Para pantalla bloqueada conviene también Batería > Sin restricciones.</string>
+    <string name="message_background_location_missing">Falta Ubicación > Permitir siempre. Sin ello la ruta puede quedarse anclada al último punto.</string>
+    <string name="message_precise_location_recording">Necesito ubicación precisa para grabar la ruta.</string>
+    <string name="message_precise_location_navigation">Necesito ubicación precisa para navegar la ruta.</string>
+    <string name="message_precise_location_breadcrumbs">Necesito ubicación precisa para sembrar migas.</string>
+    <string name="message_location_permissions_missing">Faltan permisos de localización.</string>
+    <string name="message_downloads_permission_missing">Sin permiso no puedo revisar Descargas automáticamente.</string>
+
+    <string name="setup_background_title">Falta "Permitir siempre"</string>
+    <string name="setup_background_recording">Para seguir grabando con la pantalla bloqueada necesitas Ubicación > Permitir siempre.</string>
+    <string name="setup_background_navigation">Para seguir navegando con la pantalla bloqueada necesitas Ubicación > Permitir siempre.</string>
+    <string name="setup_background_breadcrumbs">Para seguir sembrando migas con la pantalla bloqueada necesitas Ubicación > Permitir siempre.</string>
+    <string name="setup_grant_permission">Dar permiso</string>
+    <string name="setup_open_settings">Abrir ajustes</string>
+    <string name="setup_battery_title">Revisa la batería</string>
+    <string name="setup_battery_message">La app puede empezar ya, pero para que no se corte al bloquear la pantalla conviene quitar la optimización de batería. En Samsung: Batería > Sin restricciones.</string>
+    <string name="setup_open_battery">Abrir batería</string>
+
+    <string name="gpx_open_failed">No se pudo abrir el archivo GPX.</string>
+    <string name="gpx_not_enough_points">El archivo GPX no contiene suficientes puntos de ruta.</string>
+    <string name="legacy_migration_delete_failed">Migración completada, pero no se pudo eliminar %1$s.</string>
+    <string name="default_imported_route_name">GPX importado</string>
+    <string name="default_recorded_route_name">Ruta %1$d</string>
+
+    <string name="tracking_title">Grabando ruta</string>
+    <string name="tracking_waiting_location">Esperando posición...</string>
+    <string name="tracking_activation_failed">No se pudo activar la localización.</string>
+    <string name="tracking_signal_lost">Se ha perdido señal temporalmente.</string>
+    <string name="tracking_points_registered">%1$d puntos registrados</string>
+    <string name="tracking_channel_name">OpenRoute grabación</string>
+</resources>

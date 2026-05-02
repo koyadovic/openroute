@@ -42,7 +42,7 @@ class OpenRouteScreenStateTest {
             routes = listOf(route, hiddenRoute),
             selectedRouteId = route.id,
             currentLocation = LatLngPoint(40.41, -3.71),
-            message = "Ruta guardada",
+            message = "Route saved",
         ).toScreenState()
 
         assertEquals(OpenRouteScreenMode.Routes, screenState.mode)
@@ -53,17 +53,15 @@ class OpenRouteScreenStateTest {
         assertEquals("Start recording", screenState.actionBar.trackLabel)
         assertEquals("1", screenState.summary.routesValue)
         assertEquals("off", screenState.summary.liveTrackValue)
-        assertEquals("12.3 km", screenState.summary.selectedValue)
-        assertEquals("Ruta guardada", screenState.snackbarMessage)
+        assertEquals("Route saved", screenState.snackbarMessage)
         assertEquals(3, screenState.drawerItems.size)
         assertEquals(OpenRouteMainSection.Routes, screenState.drawerItems.single { it.isSelected }.section)
         assertEquals(1, screenState.routeList.items.size)
-        assertTrue(screenState.routeList.items.single().isSelected)
         assertFalse(screenState.routeList.items.single().showsNewBadge)
         assertEquals(RouteBadge.Recording, screenState.routeList.items.single().badge)
-        assertEquals("12.3 km · 46 min · 2 puntos", screenState.routeList.items.single().subtitle)
+        assertEquals("12.3 km · 46 min · 2 points", screenState.routeList.items.single().subtitle)
         assertEquals("1", screenState.routeList.hiddenRoutes?.countLabel)
-        assertEquals("Mostrar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
+        assertEquals("Show hidden", screenState.routeList.hiddenRoutes?.toggleLabel)
         assertTrue(screenState.routeList.hiddenRoutes?.items?.isEmpty() == true)
         assertEquals(0, screenState.mapState.liveTrack.size)
         assertEquals("#073B67", screenState.mapState.routes.single().color)
@@ -85,7 +83,7 @@ class OpenRouteScreenStateTest {
         assertEquals(OpenRouteScreenMode.Recording, screenState.mode)
         assertEquals("1", screenState.summary.liveTrackValue)
         assertEquals(1, screenState.mapState.liveTrack.size)
-        assertEquals("Tiempo grabando", screenState.summary.activeDurationLabel)
+        assertEquals("Recording time", screenState.summary.activeDurationLabel)
         assertEquals("2m 05s", screenState.summary.activeDurationValue)
     }
 
@@ -132,7 +130,7 @@ class OpenRouteScreenStateTest {
 
         assertEquals(OpenRouteScreenMode.Detail, screenState.mode)
         assertEquals("Sierra Loop", screenState.header.title)
-        assertEquals("10.0 km · 1h 30m · 3 puntos", screenState.header.subtitle)
+        assertEquals("10.0 km · 1h 30m · 3 points", screenState.header.subtitle)
         assertEquals("10.0 km", screenState.detailState?.distanceLabel)
         assertEquals("1h 30m", screenState.detailState?.durationLabel)
         assertEquals("sierra-loop.gpx", screenState.detailState?.fileLabel)
@@ -142,14 +140,14 @@ class OpenRouteScreenStateTest {
         assertEquals(route.id, screenState.mapState.routes.single().id)
         assertEquals(route.id, screenState.mapState.focus.routeId)
         assertTrue(screenState.mapState.focus.includeCurrentLocation)
-        assertEquals("Siguiendo ruta", screenState.detailState?.navigationState?.statusLabel)
+        assertEquals("Following route", screenState.detailState?.navigationState?.statusLabel)
         assertEquals("45%", screenState.detailState?.navigationState?.progressLabel)
         assertEquals("5.5 km", screenState.detailState?.navigationState?.remainingLabel)
         assertEquals("20 min", screenState.detailState?.navigationState?.etaLabel)
         assertEquals("12 m", screenState.detailState?.navigationState?.distanceToRouteLabel)
         assertFalse(screenState.detailState?.navigationState?.showsOffRouteAlert == true)
-        assertEquals("Abrir guía 3D", screenState.detailState?.navigationState?.actionLabel)
-        assertEquals("Detener navegación", screenState.detailState?.navigationState?.secondaryActionLabel)
+        assertEquals("Open 3D guide", screenState.detailState?.navigationState?.actionLabel)
+        assertEquals("Stop navigation", screenState.detailState?.navigationState?.secondaryActionLabel)
     }
 
     @Test
@@ -195,9 +193,9 @@ class OpenRouteScreenStateTest {
             accessPresentation = DownloadsAccessPresentation.Granted,
         )
 
-        assertEquals("Descargas", loadingBanner?.title)
+        assertEquals("Downloads", loadingBanner?.title)
         assertTrue(loadingBanner?.isLoading == true)
-        assertEquals("Permitir acceso", permissionBanner?.actionLabel)
+        assertEquals("Allow access", permissionBanner?.actionLabel)
         assertNull(noBanner)
     }
 
@@ -222,7 +220,7 @@ class OpenRouteScreenStateTest {
             detailRouteId = route.id,
         ).toScreenState()
 
-        assertEquals("6.7 km · 2 min · 2 puntos", screenState.header.subtitle)
+        assertEquals("6.7 km · 2 min · 2 points", screenState.header.subtitle)
         assertEquals("2 min", screenState.detailState?.durationLabel)
     }
 
@@ -270,7 +268,6 @@ class OpenRouteScreenStateTest {
         ).toScreenState()
 
         assertEquals(listOf("route-near", "route-far"), screenState.routeList.items.map { it.id })
-        assertEquals("3.2 km", screenState.summary.selectedValue)
     }
 
     @Test
@@ -332,11 +329,11 @@ class OpenRouteScreenStateTest {
             deleteRouteId = hiddenImportedRoute.id,
         ).toScreenState()
 
-        assertEquals("No hay rutas visibles. Puedes revisar las 2 ocultas.", screenState.routeList.emptyMessage)
-        assertEquals("Ocultar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
+        assertEquals("No visible routes. You can review the 2 hidden ones.", screenState.routeList.emptyMessage)
+        assertEquals("Hide hidden", screenState.routeList.hiddenRoutes?.toggleLabel)
         assertEquals(listOf("hidden-recorded", "hidden-imported"), screenState.routeList.hiddenRoutes?.items?.map { it.id })
         assertEquals(RouteBadge.Recording, screenState.routeList.hiddenRoutes?.items?.first()?.badge)
-        assertEquals("Eliminar ruta oculta", screenState.routeList.deleteDialog?.title)
+        assertEquals("Delete hidden route", screenState.routeList.deleteDialog?.title)
         assertTrue(screenState.routeList.deleteDialog?.message?.contains("Hidden GPX") == true)
     }
 
@@ -366,7 +363,7 @@ class OpenRouteScreenStateTest {
         assertEquals(hiddenRoute.id, screenState.detailState?.routeId)
         assertFalse(screenState.detailState?.canHide == true)
         assertTrue(screenState.detailState?.canDelete == true)
-        assertEquals("Eliminar ruta oculta", screenState.detailState?.deleteDialog?.title)
+        assertEquals("Delete hidden route", screenState.detailState?.deleteDialog?.title)
         assertEquals(hiddenRoute.id, screenState.mapState.routes.single().id)
     }
 
@@ -407,7 +404,7 @@ class OpenRouteScreenStateTest {
             ),
         ).toScreenState()
 
-        assertEquals("Fuera de ruta (50 m)", screenState.detailState?.navigationState?.statusLabel)
+        assertEquals("Off route (50 m)", screenState.detailState?.navigationState?.statusLabel)
         assertTrue(screenState.detailState?.navigationState?.showsOffRouteAlert == true)
     }
 
@@ -461,7 +458,7 @@ class OpenRouteScreenStateTest {
 
         assertEquals(OpenRouteScreenMode.Navigation3D, screenState.mode)
         assertEquals("3D Ride", screenState.navigation3DState?.title)
-        assertEquals("Guía 3D aproximada", screenState.navigation3DState?.subtitle)
+        assertEquals("Approximate 3D guide", screenState.navigation3DState?.subtitle)
         assertEquals("15%", screenState.navigation3DState?.progressLabel)
         assertEquals(172.0, screenState.navigation3DState?.renderState?.headingDegrees ?: 0.0, 0.001)
         assertTrue((screenState.navigation3DState?.renderState?.routePoints?.size ?: 0) >= 2)
@@ -509,15 +506,15 @@ class OpenRouteScreenStateTest {
         ).toScreenState()
 
         assertEquals(OpenRouteScreenMode.Navigation3D, screenState.mode)
-        assertEquals("Migas de pan", screenState.header.title)
-        assertEquals("Volviendo al inicio", screenState.header.subtitle)
+        assertEquals("Breadcrumbs", screenState.header.title)
+        assertEquals("Returning to start", screenState.header.subtitle)
         assertTrue(screenState.actionBar.isBreadcrumbing)
-        assertEquals("Volviendo", screenState.actionBar.breadcrumbLabel)
+        assertEquals("Returning", screenState.actionBar.breadcrumbLabel)
         assertTrue(screenState.navigation3DState?.isBreadcrumb == true)
-        assertEquals("Volviendo por tus migas", screenState.navigation3DState?.statusLabel)
+        assertEquals("Returning by your breadcrumbs", screenState.navigation3DState?.statusLabel)
         assertEquals("25%", screenState.navigation3DState?.progressLabel)
         assertEquals(3, screenState.mapState.liveTrack.size)
-        assertEquals("Tiempo migas", screenState.navigation3DState?.activeDurationLabel)
+        assertEquals("Breadcrumb time", screenState.navigation3DState?.activeDurationLabel)
         assertEquals("1m 30s", screenState.navigation3DState?.activeDurationValue)
     }
 

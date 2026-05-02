@@ -14,7 +14,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +41,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -68,9 +68,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -87,6 +87,7 @@ fun MainRoute(viewModel: MainViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val textProvider = remember(context) { AndroidOpenRouteTextProvider(context) }
     val appVersionLabel = remember(context) { context.resolveAppVersionLabel() }
     var downloadsAccessState by remember { mutableStateOf(context.resolveDownloadsAccessState()) }
     var trackingSetupDialogState by remember { mutableStateOf<TrackingSetupDialogState?>(null) }
@@ -121,7 +122,7 @@ fun MainRoute(viewModel: MainViewModel) {
             if (context.hasTrackingLocationPermission()) {
                 if (!context.hasTrackingBatteryExemption()) {
                     viewModel.showMessage(
-                        "Para pantalla bloqueada conviene también Batería > Sin restricciones.",
+                        context.getString(R.string.message_battery_unrestricted_hint),
                     )
                 }
                 startLocationAction.value(pendingAction)
@@ -134,23 +135,23 @@ fun MainRoute(viewModel: MainViewModel) {
             trackingSetupDialogState = TrackingSetupDialogState(
                 kind = TrackingSetupDialogKind.BackgroundLocation,
                 action = action,
-                title = "Falta \"Permitir siempre\"",
+                title = context.getString(R.string.setup_background_title),
                 message = when (action) {
                     LocationAction.Record ->
-                        "Para seguir grabando con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
+                        context.getString(R.string.setup_background_recording)
 
                     LocationAction.Navigate ->
-                        "Para seguir navegando con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
+                        context.getString(R.string.setup_background_navigation)
 
                     LocationAction.Breadcrumb ->
-                        "Para seguir sembrando migas con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
+                        context.getString(R.string.setup_background_breadcrumbs)
                 },
                 confirmLabel = if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
-                    "Dar permiso"
+                    context.getString(R.string.setup_grant_permission)
                 } else {
-                    "Abrir ajustes"
+                    context.getString(R.string.setup_open_settings)
                 },
-                dismissLabel = "Cancelar",
+                dismissLabel = context.getString(R.string.cancel),
             )
         },
     )
@@ -162,10 +163,10 @@ fun MainRoute(viewModel: MainViewModel) {
                 trackingSetupDialogState = TrackingSetupDialogState(
                     kind = TrackingSetupDialogKind.BatteryOptimization,
                     action = action,
-                    title = "Revisa la batería",
-                    message = "La app puede empezar ya, pero para que no se corte al bloquear la pantalla conviene quitar la optimización de batería. En Samsung: Batería > Sin restricciones.",
-                    confirmLabel = "Abrir batería",
-                    dismissLabel = "Continuar",
+                    title = context.getString(R.string.setup_battery_title),
+                    message = context.getString(R.string.setup_battery_message),
+                    confirmLabel = context.getString(R.string.setup_open_battery),
+                    dismissLabel = context.getString(R.string.continue_action),
                 )
             }
         },
@@ -186,7 +187,7 @@ fun MainRoute(viewModel: MainViewModel) {
             attemptPendingLocationAction.value()
         } else if (pendingLocationAction.value != null) {
             viewModel.showMessage(
-                "Falta Ubicación > Permitir siempre. Sin ello la ruta puede quedarse anclada al último punto.",
+                context.getString(R.string.message_background_location_missing),
             )
         }
     }
@@ -208,24 +209,24 @@ fun MainRoute(viewModel: MainViewModel) {
 
                 pendingLocationAction.value == LocationAction.Record ->
                     run {
-                        viewModel.showMessage("Necesito ubicación precisa para grabar la ruta.")
+                        viewModel.showMessage(context.getString(R.string.message_precise_location_recording))
                         pendingLocationAction.value = null
                     }
 
                 pendingLocationAction.value == LocationAction.Navigate ->
                     run {
-                        viewModel.showMessage("Necesito ubicación precisa para navegar la ruta.")
+                        viewModel.showMessage(context.getString(R.string.message_precise_location_navigation))
                         pendingLocationAction.value = null
                     }
 
                 pendingLocationAction.value == LocationAction.Breadcrumb ->
                     run {
-                        viewModel.showMessage("Necesito ubicación precisa para sembrar migas.")
+                        viewModel.showMessage(context.getString(R.string.message_precise_location_breadcrumbs))
                         pendingLocationAction.value = null
                     }
             }
         } else if (pendingLocationAction.value != null) {
-            viewModel.showMessage("Faltan permisos de localización.")
+            viewModel.showMessage(context.getString(R.string.message_location_permissions_missing))
             pendingLocationAction.value = null
         }
     }
@@ -237,7 +238,7 @@ fun MainRoute(viewModel: MainViewModel) {
         if (granted && downloadsAccessState == DownloadsAccessState.Granted) {
             viewModel.syncDownloadedGpxFiles()
         } else if (!granted) {
-            viewModel.showMessage("Sin permiso no puedo revisar Descargas automaticamente.")
+            viewModel.showMessage(context.getString(R.string.message_downloads_permission_missing))
         }
     }
 
@@ -279,6 +280,7 @@ fun MainRoute(viewModel: MainViewModel) {
         resolveDownloadsBannerState(
             isSyncingDownloads = screenState.isSyncingDownloads,
             accessPresentation = downloadsAccessState.toPresentation(),
+            text = textProvider,
         )
     }
 
@@ -512,27 +514,25 @@ fun OpenRouteScreen(
                     ),
                     navigationIcon = {
                         if (showsDrawer) {
-                            TextButton(
+                            IconButton(
                                 onClick = {
                                     coroutineScope.launch { drawerState.open() }
                                 },
                             ) {
-                                Text("Menú")
+                                Image(
+                                    painter = painterResource(R.drawable.ic_openroute_launcher),
+                                    contentDescription = stringResource(R.string.menu),
+                                    modifier = Modifier.size(42.dp),
+                                )
                             }
                         }
                     },
                     title = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Image(
-                                painter = painterResource(R.drawable.ic_openroute_launcher),
-                                contentDescription = null,
-                                modifier = Modifier.size(42.dp),
-                            )
                             Column {
-                                if (state.header.title == "OpenRoute") {
+                                if (state.header.title == stringResource(R.string.app_name)) {
                                     OpenRouteWordmark(
                                         style = MaterialTheme.typography.headlineSmall.copy(
                                             fontWeight = FontWeight.Bold,
@@ -636,7 +636,7 @@ private fun OpenRouteDrawer(
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
-                    text = "Navegación local",
+                    text = stringResource(R.string.local_navigation),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -645,6 +645,12 @@ private fun OpenRouteDrawer(
 
         items.forEach { item ->
             NavigationDrawerItem(
+                icon = {
+                    Text(
+                        text = item.icon,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                },
                 label = {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
@@ -821,9 +827,9 @@ private fun RecordingScreen(
         ) {
             Text(
                 text = if (state.actionBar.isTracking) {
-                    "Grabando ruta localmente. Puedes bloquear la pantalla si la ubicación está en Permitir siempre y la batería sin restricciones."
+                    stringResource(R.string.recording_info_active)
                 } else {
-                    "Inicia una grabación para guardar una ruta nueva con distancia, tiempo y puntos registrados."
+                    stringResource(R.string.recording_info_idle)
                 },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 style = MaterialTheme.typography.bodyMedium,
@@ -878,9 +884,9 @@ private fun BreadcrumbsScreen(
         ) {
             Text(
                 text = if (state.actionBar.isBreadcrumbing) {
-                    "Sembrando migas. Si te das la vuelta, la app cambiará a guía 3D para volver al punto inicial."
+                    stringResource(R.string.breadcrumbs_info_active)
                 } else {
-                    "Este modo guarda tu rastro temporalmente para poder volver por donde viniste sin crear una ruta guardada."
+                    stringResource(R.string.breadcrumbs_info_idle)
                 },
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                 style = MaterialTheme.typography.bodyMedium,
@@ -954,7 +960,7 @@ private fun RouteDetailScreen(
                 )
                 if (state.fileLabel != null) {
                     Text(
-                        text = "Archivo: ${state.fileLabel}",
+                        text = stringResource(R.string.route_file_label, state.fileLabel),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -971,12 +977,12 @@ private fun RouteDetailScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SummaryChip(
-                label = "Distance",
+                label = stringResource(R.string.distance_label),
                 value = state.distanceLabel,
                 modifier = Modifier.weight(1f),
             )
             SummaryChip(
-                label = "Duration",
+                label = stringResource(R.string.duration_label),
                 value = state.durationLabel,
                 modifier = Modifier.weight(1f),
             )
@@ -987,12 +993,12 @@ private fun RouteDetailScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SummaryChip(
-                label = "Points",
+                label = stringResource(R.string.points_label),
                 value = state.pointsLabel,
                 modifier = Modifier.weight(1f),
             )
             SummaryChip(
-                label = "Source",
+                label = stringResource(R.string.source_label),
                 value = state.sourceLabel,
                 modifier = Modifier.weight(1f),
             )
@@ -1134,12 +1140,12 @@ private fun Navigation3DScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     SummaryChip(
-                        label = "Progress",
+                        label = stringResource(R.string.progress_label),
                         value = state.progressLabel,
                         modifier = Modifier.weight(1f),
                     )
                     SummaryChip(
-                        label = "Remaining",
+                        label = stringResource(R.string.remaining_label),
                         value = state.remainingLabel,
                         modifier = Modifier.weight(1f),
                     )
@@ -1149,12 +1155,12 @@ private fun Navigation3DScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     SummaryChip(
-                        label = "ETA",
+                        label = stringResource(R.string.eta_label),
                         value = state.etaLabel,
                         modifier = Modifier.weight(1f),
                     )
                     SummaryChip(
-                        label = "To Route",
+                        label = stringResource(R.string.to_route_label),
                         value = state.distanceToRouteLabel,
                         modifier = Modifier.weight(1f),
                     )
@@ -1227,11 +1233,6 @@ private fun RouteSummary(state: SummaryState) {
                 value = state.liveTrackValue,
                 modifier = Modifier.weight(1f),
             )
-            SummaryChip(
-                label = state.selectedLabel,
-                value = state.selectedValue,
-                modifier = Modifier.weight(1f),
-            )
         }
         if (state.activeDurationLabel != null && state.activeDurationValue != null) {
             SummaryChip(
@@ -1265,7 +1266,7 @@ private fun NavigationCard(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Navegación",
+                text = stringResource(R.string.navigation_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1283,12 +1284,12 @@ private fun NavigationCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 SummaryChip(
-                    label = "Progress",
+                    label = stringResource(R.string.progress_label),
                     value = state.progressLabel,
                     modifier = Modifier.weight(1f),
                 )
                 SummaryChip(
-                    label = "Remaining",
+                    label = stringResource(R.string.remaining_label),
                     value = state.remainingLabel,
                     modifier = Modifier.weight(1f),
                 )
@@ -1298,12 +1299,12 @@ private fun NavigationCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 SummaryChip(
-                    label = "ETA",
+                    label = stringResource(R.string.eta_label),
                     value = state.etaLabel,
                     modifier = Modifier.weight(1f),
                 )
                 SummaryChip(
-                    label = "To Route",
+                    label = stringResource(R.string.to_route_label),
                     value = state.distanceToRouteLabel,
                     modifier = Modifier.weight(1f),
                 )
@@ -1353,7 +1354,7 @@ private fun RenameRouteDialog(
                 value = state.name,
                 onValueChange = onValueChange,
                 singleLine = true,
-                label = { Text("Nombre") },
+                label = { Text(stringResource(R.string.route_rename_name)) },
             )
         },
         confirmButton = {
@@ -1469,12 +1470,12 @@ private fun HiddenRoutesHeader(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Rutas ocultas",
+                    text = stringResource(R.string.hidden_routes_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "${state.countLabel} guardadas fuera de la vista principal",
+                    text = stringResource(R.string.hidden_routes_count, state.countLabel),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -1484,13 +1485,13 @@ private fun HiddenRoutesHeader(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = if (state.isExpanded) "Ocultar" else "Mostrar",
+                    text = if (state.isExpanded) stringResource(R.string.hide) else stringResource(R.string.show),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Toca aquí",
+                    text = stringResource(R.string.tap_here),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1504,7 +1505,6 @@ private fun RouteRow(
     state: RouteListItemState,
     onClick: () -> Unit,
 ) {
-    val borderColor = if (state.isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
     val badgeColor = when (state.badge) {
         RouteBadge.Recording -> MaterialTheme.colorScheme.tertiary
         RouteBadge.Imported -> MaterialTheme.colorScheme.secondary
@@ -1515,7 +1515,6 @@ private fun RouteRow(
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .clickable(onClick = onClick),
-        border = BorderStroke(2.dp, borderColor),
         shape = RoundedCornerShape(20.dp),
     ) {
         Row(
@@ -1550,7 +1549,7 @@ private fun RouteRow(
                             containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                             labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
                         ),
-                        label = { Text("Nueva") },
+                        label = { Text(stringResource(R.string.new_badge)) },
                     )
                 }
                 AssistChip(
@@ -1668,16 +1667,16 @@ private fun Context.resolveDownloadsAccessState(): DownloadsAccessState {
 private fun Context.resolveAppVersionLabel(): String {
     return runCatching {
         val packageInfo = packageManager.getPackageInfo(packageName, 0)
-        val versionName = packageInfo.versionName ?: "desconocida"
+        val versionName = packageInfo.versionName ?: getString(R.string.version_unknown)
         val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             packageInfo.longVersionCode
         } else {
             @Suppress("DEPRECATION")
             packageInfo.versionCode.toLong()
         }
-        "Versión $versionName ($versionCode)"
+        getString(R.string.version_label, versionName, versionCode)
     }.getOrElse {
-        "Versión desconocida"
+        getString(R.string.version_unknown)
     }
 }
 

@@ -22,6 +22,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.openroute.app.MainActivity
+import com.openroute.app.R
 import com.openroute.app.data.RouteRepository
 import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
@@ -64,7 +65,10 @@ class TrackingService : Service() {
 
             if (update.source == FusedLocationSource.Gnss || update.shouldAppendTrackPoint) {
                 val trackedPoints = TrackingSessionStore.state.value.points.size
-                updateNotification("Grabando ruta", "$trackedPoints puntos registrados")
+                updateNotification(
+                    getString(R.string.tracking_title),
+                    getString(R.string.tracking_points_registered, trackedPoints),
+                )
             }
         }
         createNotificationChannel()
@@ -100,7 +104,13 @@ class TrackingService : Service() {
             return
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("Grabando ruta", "Esperando posición…"))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(
+                getString(R.string.tracking_title),
+                getString(R.string.tracking_waiting_location),
+            ),
+        )
         TrackingSessionStore.startSession()
         fusionRuntime.reset()
         fusionRuntime.start()
@@ -111,7 +121,10 @@ class TrackingService : Service() {
                 locationUpdatesPendingIntent,
             )
             .addOnFailureListener {
-                updateNotification("Grabando ruta", "No se pudo activar la localización.")
+                updateNotification(
+                    getString(R.string.tracking_title),
+                    getString(R.string.tracking_activation_failed),
+                )
                 finalizeAndStop()
             }
 
@@ -132,7 +145,10 @@ class TrackingService : Service() {
             ?.takeIf { availability -> !availability.isLocationAvailable }
             ?.let {
                 Log.w(TAG, "Location availability reported as unavailable during tracking")
-                updateNotification("Grabando ruta", "Se ha perdido señal temporalmente.")
+                updateNotification(
+                    getString(R.string.tracking_title),
+                    getString(R.string.tracking_signal_lost),
+                )
             }
     }
 
@@ -167,7 +183,7 @@ class TrackingService : Service() {
         serviceScope.launch {
             val route = RouteTrack(
                 id = UUID.randomUUID().toString(),
-                name = "Ride ${System.currentTimeMillis()}",
+                name = getString(R.string.default_recorded_route_name, System.currentTimeMillis()),
                 source = RouteSource.RECORDED,
                 createdAtMillis = session.finishedAtMillis,
                 distanceMeters = points.distanceMeters(),
@@ -200,7 +216,7 @@ class TrackingService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "OpenRoute tracking",
+            getString(R.string.tracking_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         )
         manager.createNotificationChannel(channel)

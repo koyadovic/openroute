@@ -22,6 +22,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.openroute.app.MainActivity
+import com.openroute.app.R
 
 class BreadcrumbService : Service() {
     private lateinit var fusionRuntime: LocationFusionRuntime
@@ -83,7 +84,13 @@ class BreadcrumbService : Service() {
             return
         }
 
-        startForeground(NOTIFICATION_ID, buildNotification("Migas de pan", "Esperando posición…"))
+        startForeground(
+            NOTIFICATION_ID,
+            buildNotification(
+                getString(R.string.breadcrumbs_title),
+                getString(R.string.navigation_waiting_location),
+            ),
+        )
         BreadcrumbSessionStore.startSession()
         fusionRuntime.reset()
         fusionRuntime.start()
@@ -94,7 +101,10 @@ class BreadcrumbService : Service() {
                 locationUpdatesPendingIntent,
             )
             .addOnFailureListener {
-                updateNotification("Migas de pan", "No se pudo activar la localización.")
+                updateNotification(
+                    getString(R.string.breadcrumbs_title),
+                    getString(R.string.tracking_activation_failed),
+                )
                 finalizeAndStop()
             }
 
@@ -115,7 +125,10 @@ class BreadcrumbService : Service() {
             ?.takeIf { availability -> !availability.isLocationAvailable }
             ?.let {
                 Log.w(TAG, "Location availability reported as unavailable during breadcrumbs")
-                updateNotification("Migas de pan", "Se ha perdido señal temporalmente.")
+                updateNotification(
+                    getString(R.string.breadcrumbs_title),
+                    getString(R.string.tracking_signal_lost),
+                )
             }
     }
 
@@ -162,7 +175,7 @@ class BreadcrumbService : Service() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "OpenRoute breadcrumbs",
+            getString(R.string.breadcrumbs_channel_name),
             NotificationManager.IMPORTANCE_LOW,
         )
         manager.createNotificationChannel(channel)
@@ -189,14 +202,17 @@ class BreadcrumbService : Service() {
     private fun updateNotificationForState() {
         val state = BreadcrumbSessionStore.state.value
         val title = when (state.mode) {
-            BreadcrumbMode.Seeding -> "Sembrando migas"
-            BreadcrumbMode.Returning -> "Volviendo al inicio"
+            BreadcrumbMode.Seeding -> getString(R.string.breadcrumbs_notification_seeding)
+            BreadcrumbMode.Returning -> getString(R.string.breadcrumbs_subtitle_returning)
         }
         val text = when {
             state.isReturning && state.progress != null ->
-                "${state.progress.remainingDistanceMeters.toDistanceLabel()} al inicio"
+                getString(
+                    R.string.breadcrumbs_distance_to_start,
+                    state.progress.remainingDistanceMeters.toDistanceLabel(),
+                )
 
-            else -> "${state.points.size} puntos registrados"
+            else -> getString(R.string.tracking_points_registered, state.points.size)
         }
         updateNotification(title, text)
     }

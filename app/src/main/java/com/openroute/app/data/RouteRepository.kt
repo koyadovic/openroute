@@ -1,6 +1,7 @@
 package com.openroute.app.data
 
 import android.content.Context
+import com.openroute.app.R
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -10,8 +11,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class RouteRepository(context: Context) {
-    private val routeDao = OpenRouteDatabase.get(context).routeDao()
-    private val legacyStorageFile = File(context.filesDir, LEGACY_STORAGE_FILE_NAME)
+    private val appContext = context.applicationContext
+    private val routeDao = OpenRouteDatabase.get(appContext).routeDao()
+    private val legacyStorageFile = File(appContext.filesDir, LEGACY_STORAGE_FILE_NAME)
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
@@ -101,7 +103,7 @@ class RouteRepository(context: Context) {
         }
 
         if (!legacyStorageFile.delete() && legacyStorageFile.exists()) {
-            error("Migración completada, pero no se pudo eliminar ${legacyStorageFile.name}.")
+            error(appContext.getString(R.string.legacy_migration_delete_failed, legacyStorageFile.name))
         }
     }
 

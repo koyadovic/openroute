@@ -308,7 +308,7 @@ private fun List<LatLngPoint>.toBreadcrumbRoute(startedAtMillis: Long): RouteTra
 
     return RouteTrack(
         id = BREADCRUMB_ROUTE_ID,
-        name = "Migas de pan",
+        name = "Breadcrumbs",
         source = RouteSource.RECORDED,
         createdAtMillis = startedAtMillis,
         distanceMeters = distanceMeters(),

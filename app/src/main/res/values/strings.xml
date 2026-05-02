@@ -1,4 +1,150 @@
 <resources>
     <string name="app_name">OpenRoute</string>
-</resources>
+    <string name="app_subtitle">Local GPX, OSM map and route recording</string>
+    <string name="menu">Menu</string>
+    <string name="local_navigation">Local navigation</string>
+    <string name="version_label">Version %1$s (%2$d)</string>
+    <string name="version_unknown">Unknown version</string>
 
+    <string name="routes_title">Routes</string>
+    <string name="routes_header_subtitle">%1$d visible · %2$d hidden</string>
+    <string name="routes_empty">No routes yet. Import a GPX or start recording.</string>
+    <string name="routes_empty_with_hidden">No visible routes. You can review the %1$d hidden ones.</string>
+    <string name="routes_drawer_subtitle">View, import and manage routes</string>
+    <string name="import_gpx">Import GPX</string>
+    <string name="hidden_routes_title">Hidden routes</string>
+    <string name="hidden_routes_count">%1$s saved outside the main view</string>
+    <string name="hidden_routes_show">Show hidden</string>
+    <string name="hidden_routes_hide">Hide hidden</string>
+    <string name="show">Show</string>
+    <string name="hide">Hide</string>
+    <string name="tap_here">Tap here</string>
+    <string name="new_badge">New</string>
+
+    <string name="recording_title">Record route</string>
+    <string name="recording_subtitle_active">Recording local track</string>
+    <string name="recording_subtitle_idle">Record a new route</string>
+    <string name="recording_drawer_subtitle">Record a new outing</string>
+    <string name="start_recording">Start recording</string>
+    <string name="stop_recording">Stop recording</string>
+    <string name="recording_info_active">Recording route locally. You can lock the screen if Location is set to Always allow and battery is unrestricted.</string>
+    <string name="recording_info_idle">Start a recording to save a new route with distance, duration and tracked points.</string>
+    <string name="recording_duration_label">Recording time</string>
+
+    <string name="breadcrumbs_title">Breadcrumbs</string>
+    <string name="breadcrumbs_drawer_subtitle">Leave a trail to return</string>
+    <string name="breadcrumbs_subtitle_returning">Returning to start</string>
+    <string name="breadcrumbs_subtitle_active">Leaving trail</string>
+    <string name="breadcrumbs_subtitle_idle">Leave a trail to return</string>
+    <string name="breadcrumbs_start">Breadcrumbs</string>
+    <string name="breadcrumbs_stop">Stop breadcrumbs</string>
+    <string name="breadcrumbs_returning">Returning</string>
+    <string name="breadcrumbs_stop_short">Stop breadcrumbs</string>
+    <string name="breadcrumbs_info_active">Leaving breadcrumbs. If you turn back, the app will switch to 3D guidance back to the starting point.</string>
+    <string name="breadcrumbs_info_idle">This mode keeps a temporary trail so you can return the way you came without creating a saved route.</string>
+    <string name="breadcrumbs_duration_label">Breadcrumb time</string>
+    <string name="breadcrumbs_route_name">Breadcrumbs</string>
+    <string name="breadcrumbs_status_returning">Returning by your breadcrumbs</string>
+    <string name="breadcrumbs_status_off_route">Off trail (%1$s)</string>
+    <string name="breadcrumbs_distance_to_start">%1$s to start</string>
+    <string name="breadcrumbs_channel_name">OpenRoute breadcrumbs</string>
+    <string name="breadcrumbs_notification_seeding">Leaving breadcrumbs</string>
+
+    <string name="summary_routes">Routes</string>
+    <string name="summary_live_track">Live track</string>
+    <string name="summary_off">off</string>
+    <string name="summary_none">-</string>
+
+    <string name="route_source_recorded">Locally recorded route</string>
+    <string name="route_source_imported">Route imported from GPX</string>
+    <string name="route_points_count">%1$d points</string>
+    <string name="route_file_label">File: %1$s</string>
+    <string name="route_hide">Hide route</string>
+    <string name="route_delete">Delete route</string>
+    <string name="route_delete_title">Delete route</string>
+    <string name="route_delete_hidden_title">Delete hidden route</string>
+    <string name="route_delete_message">"%1$s" will be removed from OpenRoute.</string>
+    <string name="route_rename">Rename</string>
+    <string name="route_rename_title">Rename route</string>
+    <string name="route_rename_name">Name</string>
+    <string name="route_rename_empty">The name cannot be empty.</string>
+    <string name="back">Back</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="continue_action">Continue</string>
+
+    <string name="distance_label">Distance</string>
+    <string name="duration_label">Duration</string>
+    <string name="points_label">Points</string>
+    <string name="source_label">Source</string>
+    <string name="progress_label">Progress</string>
+    <string name="remaining_label">Remaining</string>
+    <string name="eta_label">ETA</string>
+    <string name="to_route_label">To route</string>
+
+    <string name="navigation_title">Navigation</string>
+    <string name="navigation_start">Start navigation</string>
+    <string name="navigation_open_3d">Open 3D guide</string>
+    <string name="navigation_stop">Stop navigation</string>
+    <string name="navigation_inactive">Navigation inactive</string>
+    <string name="navigation_waiting_location">Waiting for location...</string>
+    <string name="navigation_following_route">Following route</string>
+    <string name="navigation_off_route">Off route (%1$s)</string>
+    <string name="navigation_3d_subtitle">Approximate 3D guide</string>
+    <string name="navigation_back_to_detail">Back to detail</string>
+    <string name="navigation_active">Navigation active</string>
+    <string name="navigation_channel_name">OpenRoute navigation</string>
+    <string name="navigation_notification_title">Navigating %1$s</string>
+    <string name="navigation_notification_text">%1$d%% · %2$s remaining</string>
+    <string name="navigation_default_route">Route</string>
+    <string name="navigation_3d_not_enough_route">Not enough route for 3D guidance.</string>
+
+    <string name="downloads_title">Downloads</string>
+    <string name="downloads_scanning">Searching Downloads for new GPX files...</string>
+    <string name="downloads_auto_import_title">Auto-import Downloads</string>
+    <string name="downloads_all_files_message">Allow access to Downloads to import GPX files automatically when the app opens.</string>
+    <string name="downloads_storage_message">Allow storage read access to import downloaded GPX files when the app opens.</string>
+    <string name="downloads_allow_access">Allow access</string>
+    <string name="downloads_grant_permission">Grant permission</string>
+
+    <string name="message_route_saved">Route saved: %1$s</string>
+    <string name="message_route_imported">Imported %1$s</string>
+    <string name="message_import_failed">Could not import the GPX.</string>
+    <string name="message_route_hidden">Route hidden: %1$s</string>
+    <string name="message_route_deleted">Route deleted: %1$s</string>
+    <string name="message_route_renamed">Route renamed: %1$s</string>
+    <string name="message_downloads_imported_with_failures">Imported %1$d GPX files. %2$d could not be read.</string>
+    <string name="message_downloads_imported">Imported %1$d GPX files from Downloads.</string>
+    <string name="message_downloads_failed">%1$d GPX files from Downloads could not be read.</string>
+    <string name="message_battery_unrestricted_hint">For locked-screen tracking, also set Battery > Unrestricted.</string>
+    <string name="message_background_location_missing">Missing Location > Allow all the time. Without it, the route can get stuck at the last point.</string>
+    <string name="message_precise_location_recording">Precise location is required to record the route.</string>
+    <string name="message_precise_location_navigation">Precise location is required to navigate the route.</string>
+    <string name="message_precise_location_breadcrumbs">Precise location is required to leave breadcrumbs.</string>
+    <string name="message_location_permissions_missing">Location permissions are missing.</string>
+    <string name="message_downloads_permission_missing">Without permission, Downloads cannot be checked automatically.</string>
+
+    <string name="setup_background_title">Missing "Allow all the time"</string>
+    <string name="setup_background_recording">To keep recording with the screen locked, set Location > Allow all the time.</string>
+    <string name="setup_background_navigation">To keep navigating with the screen locked, set Location > Allow all the time.</string>
+    <string name="setup_background_breadcrumbs">To keep leaving breadcrumbs with the screen locked, set Location > Allow all the time.</string>
+    <string name="setup_grant_permission">Grant permission</string>
+    <string name="setup_open_settings">Open settings</string>
+    <string name="setup_battery_title">Review battery settings</string>
+    <string name="setup_battery_message">The app can start now, but to prevent cuts with the screen locked, battery optimization should be disabled. On Samsung: Battery > Unrestricted.</string>
+    <string name="setup_open_battery">Open battery</string>
+
+    <string name="gpx_open_failed">Could not open the GPX file.</string>
+    <string name="gpx_not_enough_points">The GPX file does not contain enough route points.</string>
+    <string name="legacy_migration_delete_failed">Migration completed, but %1$s could not be removed.</string>
+    <string name="default_imported_route_name">Imported GPX</string>
+    <string name="default_recorded_route_name">Ride %1$d</string>
+
+    <string name="tracking_title">Recording route</string>
+    <string name="tracking_waiting_location">Waiting for location...</string>
+    <string name="tracking_activation_failed">Could not activate location.</string>
+    <string name="tracking_signal_lost">Signal lost temporarily.</string>
+    <string name="tracking_points_registered">%1$d points recorded</string>
+    <string name="tracking_channel_name">OpenRoute tracking</string>
+</resources>
