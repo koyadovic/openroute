@@ -102,6 +102,7 @@ fun MainRoute(viewModel: MainViewModel) {
             when (action) {
                 LocationAction.Record -> viewModel.startRecording(context)
                 LocationAction.Navigate -> viewModel.startNavigation(context)
+                LocationAction.Breadcrumb -> viewModel.startBreadcrumbs(context)
             }
             pendingLocationAction.value = null
         },
@@ -132,6 +133,9 @@ fun MainRoute(viewModel: MainViewModel) {
 
                     LocationAction.Navigate ->
                         "Para seguir navegando con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
+
+                    LocationAction.Breadcrumb ->
+                        "Para seguir sembrando migas con la pantalla bloqueada necesitas Ubicación > Permitir siempre."
                 },
                 confirmLabel = if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
                     "Dar permiso"
@@ -205,6 +209,12 @@ fun MainRoute(viewModel: MainViewModel) {
                         viewModel.showMessage("Necesito ubicación precisa para navegar la ruta.")
                         pendingLocationAction.value = null
                     }
+
+                pendingLocationAction.value == LocationAction.Breadcrumb ->
+                    run {
+                        viewModel.showMessage("Necesito ubicación precisa para sembrar migas.")
+                        pendingLocationAction.value = null
+                    }
             }
         } else if (pendingLocationAction.value != null) {
             viewModel.showMessage("Faltan permisos de localización.")
@@ -274,7 +284,12 @@ fun MainRoute(viewModel: MainViewModel) {
     BackHandler(enabled = screenState.mode != OpenRouteScreenMode.Browse) {
         when (screenState.mode) {
             OpenRouteScreenMode.Detail -> viewModel.closeRouteDetail()
-            OpenRouteScreenMode.Navigation3D -> viewModel.closeNavigation3D()
+            OpenRouteScreenMode.Navigation3D -> if (screenState.navigation3DState?.isBreadcrumb == true) {
+                viewModel.stopBreadcrumbs(context)
+            } else {
+                viewModel.closeNavigation3D()
+            }
+
             OpenRouteScreenMode.Browse -> Unit
         }
     }
@@ -299,6 +314,26 @@ fun MainRoute(viewModel: MainViewModel) {
                     },
                     onMissingPermission = {
                         pendingLocationAction.value = LocationAction.Record
+                        locationPermissionLauncher.launch(locationPermissions.toTypedArray())
+                    },
+                )
+            }
+        },
+        onBreadcrumbClick = {
+            if (screenState.actionBar.isBreadcrumbing) {
+                viewModel.stopBreadcrumbs(context)
+            } else {
+                context.withPreciseLocationPermission(
+                    permissions = locationPermissions,
+                    onGranted = {
+                        if (context.hasBackgroundLocationPermission()) {
+                            maybePromptBatteryOptimization.value(LocationAction.Breadcrumb)
+                        } else {
+                            promptBackgroundLocationAccess.value(LocationAction.Breadcrumb)
+                        }
+                    },
+                    onMissingPermission = {
+                        pendingLocationAction.value = LocationAction.Breadcrumb
                         locationPermissionLauncher.launch(locationPermissions.toTypedArray())
                     },
                 )
@@ -346,8 +381,20 @@ fun MainRoute(viewModel: MainViewModel) {
                 )
             }
         },
-        onStopNavigationClick = { viewModel.stopNavigation(context) },
-        onCloseNavigation3DClick = viewModel::closeNavigation3D,
+        onStopNavigationClick = {
+            if (screenState.navigation3DState?.isBreadcrumb == true) {
+                viewModel.stopBreadcrumbs(context)
+            } else {
+                viewModel.stopNavigation(context)
+            }
+        },
+        onCloseNavigation3DClick = {
+            if (screenState.navigation3DState?.isBreadcrumb == true) {
+                viewModel.stopBreadcrumbs(context)
+            } else {
+                viewModel.closeNavigation3D()
+            }
+        },
         onRouteClick = viewModel::selectRoute,
     )
 
@@ -394,6 +441,7 @@ fun OpenRouteScreen(
     snackbarHostState: SnackbarHostState,
     onImportClick: () -> Unit,
     onTrackClick: () -> Unit,
+    onBreadcrumbClick: () -> Unit,
     onEnableDownloadsAutoImport: () -> Unit,
     onHideSelectedClick: () -> Unit,
     onToggleHiddenRoutesClick: () -> Unit,
@@ -451,6 +499,7 @@ fun OpenRouteScreen(
                 downloadsBannerState = downloadsBannerState,
                 onImportClick = onImportClick,
                 onTrackClick = onTrackClick,
+                onBreadcrumbClick = onBreadcrumbClick,
                 onEnableDownloadsAutoImport = onEnableDownloadsAutoImport,
                 onHideSelectedClick = onHideSelectedClick,
                 onToggleHiddenRoutesClick = onToggleHiddenRoutesClick,
@@ -503,6 +552,7 @@ private fun BrowseScreen(
     downloadsBannerState: DownloadsBannerState?,
     onImportClick: () -> Unit,
     onTrackClick: () -> Unit,
+    onBreadcrumbClick: () -> Unit,
     onEnableDownloadsAutoImport: () -> Unit,
     onHideSelectedClick: () -> Unit,
     onToggleHiddenRoutesClick: () -> Unit,
@@ -521,6 +571,7 @@ private fun BrowseScreen(
             state = state.actionBar,
             onImportClick = onImportClick,
             onTrackClick = onTrackClick,
+            onBreadcrumbClick = onBreadcrumbClick,
         )
 
         downloadsBannerState?.let { bannerState ->
@@ -850,31 +901,44 @@ private fun ActionBar(
     state: ActionBarState,
     onImportClick: () -> Unit,
     onTrackClick: () -> Unit,
+    onBreadcrumbClick: () -> Unit,
 ) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Button(
-            modifier = Modifier.weight(1f),
-            onClick = onImportClick,
-            enabled = state.isImportEnabled,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (state.showsImportProgress) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Text(state.importLabel)
+            Button(
+                modifier = Modifier.weight(1f),
+                onClick = onImportClick,
+                enabled = state.isImportEnabled,
+            ) {
+                if (state.showsImportProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(state.importLabel)
+                }
+            }
+
+            Button(
+                modifier = Modifier.weight(1f),
+                onClick = onTrackClick,
+            ) {
+                Text(state.trackLabel)
             }
         }
 
         Button(
-            modifier = Modifier.weight(1f),
-            onClick = onTrackClick,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onBreadcrumbClick,
         ) {
-            Text(state.trackLabel)
+            Text(state.breadcrumbLabel)
         }
     }
 }
@@ -1345,6 +1409,7 @@ private enum class DownloadsAccessState {
 private enum class LocationAction {
     Record,
     Navigate,
+    Breadcrumb,
 }
 
 private enum class TrackingSetupDialogKind {

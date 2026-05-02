@@ -1,9 +1,12 @@
 package com.openroute.app.ui
 
 import com.openroute.app.data.LatLngPoint
+import com.openroute.app.data.RouteNavigationProgress
 import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
 import com.openroute.app.location.NavigationState
+import com.openroute.app.location.BreadcrumbMode
+import com.openroute.app.location.BreadcrumbState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -419,6 +422,50 @@ class OpenRouteScreenStateTest {
                 LatLngPoint(40.4012, -3.6994),
             ) == true,
         )
+    }
+
+    @Test
+    fun `maps returning breadcrumbs into dedicated 3d screen state`() {
+        val breadcrumbPoints = listOf(
+            LatLngPoint(40.00000, -3.00000),
+            LatLngPoint(40.00020, -3.00000),
+            LatLngPoint(40.00040, -3.00000),
+        )
+        val currentLocation = LatLngPoint(40.00030, -3.00000)
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            breadcrumbState = BreadcrumbState(
+                isActive = true,
+                mode = BreadcrumbMode.Returning,
+                startedAtMillis = 1_700_000_000_000,
+                points = breadcrumbPoints,
+                currentLocation = currentLocation,
+                progress = RouteNavigationProgress(
+                    nearestRoutePointIndex = 1,
+                    nearestSegmentStartIndex = 1,
+                    distanceAlongRouteMeters = 33.0,
+                    completedDistanceMeters = 11.0,
+                    remainingDistanceMeters = 33.0,
+                    completionRatio = 0.25,
+                    distanceToRouteMeters = 2.0,
+                    displayLocation = currentLocation,
+                    isLocationSnappedToRoute = true,
+                    headingDegrees = 180.0,
+                    travelDirection = com.openroute.app.data.RouteTravelDirection.Backward,
+                ),
+            ),
+        ).toScreenState()
+
+        assertEquals(OpenRouteScreenMode.Navigation3D, screenState.mode)
+        assertEquals("Migas de pan", screenState.header.title)
+        assertEquals("Volviendo al inicio", screenState.header.subtitle)
+        assertTrue(screenState.actionBar.isBreadcrumbing)
+        assertEquals("Volviendo", screenState.actionBar.breadcrumbLabel)
+        assertTrue(screenState.navigation3DState?.isBreadcrumb == true)
+        assertEquals("Volviendo por tus migas", screenState.navigation3DState?.statusLabel)
+        assertEquals("25%", screenState.navigation3DState?.progressLabel)
+        assertEquals(3, screenState.mapState.liveTrack.size)
     }
 
     @Test

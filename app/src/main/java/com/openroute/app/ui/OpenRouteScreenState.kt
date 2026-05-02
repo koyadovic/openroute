@@ -9,6 +9,7 @@ import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
 import com.openroute.app.data.RouteTravelDirection
 import com.openroute.app.data.effectiveDurationMillis
+import com.openroute.app.location.BreadcrumbState
 import kotlin.math.roundToInt
 
 enum class OpenRouteScreenMode {
@@ -25,9 +26,11 @@ data class HeaderState(
 data class ActionBarState(
     val importLabel: String = "Import GPX",
     val trackLabel: String = "Start recording",
+    val breadcrumbLabel: String = "Migas de pan",
     val isImportEnabled: Boolean = true,
     val showsImportProgress: Boolean = false,
     val isTracking: Boolean = false,
+    val isBreadcrumbing: Boolean = false,
 )
 
 data class BrowseActionState(
@@ -138,6 +141,7 @@ data class Navigation3DState(
     val distanceToRouteLabel: String,
     val showsOffRouteAlert: Boolean = false,
     val renderState: Navigation3DRenderState = Navigation3DRenderState(),
+    val isBreadcrumb: Boolean = false,
 )
 
 data class OpenRouteScreenState(
@@ -174,8 +178,12 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
     val selectedRoute = selectedRoute
     val detailRoute = detailRoute
     val navigation3DRoute = navigation3DRoute
-    val effectiveCurrentLocation = navigationState.currentLocation ?: currentLocation
-    val effectiveLiveTrack = if (navigationState.isNavigating) navigationState.visitedPoints else liveTrack
+    val effectiveCurrentLocation = navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation
+    val effectiveLiveTrack = when {
+        navigationState.isNavigating -> navigationState.visitedPoints
+        breadcrumbState.isActive -> breadcrumbState.points
+        else -> liveTrack
+    }
     val mapRoutes = if (detailRoute != null) {
         visibleRoutes.filter { it.id == detailRoute.id }
     } else {
@@ -202,12 +210,13 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
     val navigationProgress = navigation3DRoute?.let { route ->
         navigationState.progressFor(route.id)
     }
-    val navigation3DState = navigation3DRoute
+    val routeNavigation3DState = navigation3DRoute
         ?.takeIf { navigationState.isActiveFor(it.id) }
         ?.toNavigation3DState(
             progress = navigationProgress,
             currentLocation = navigationState.currentLocation,
         )
+    val navigation3DState = breadcrumbState.toNavigation3DState() ?: routeNavigation3DState
 
     return OpenRouteScreenState(
         mode = when {
@@ -233,6 +242,12 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             showsImportProgress = isImporting,
             isTracking = isTracking,
             trackLabel = if (isTracking) "Stop recording" else "Start recording",
+            isBreadcrumbing = breadcrumbState.isActive,
+            breadcrumbLabel = when {
+                breadcrumbState.isReturning -> "Volviendo"
+                breadcrumbState.isActive -> "Parar migas"
+                else -> "Migas de pan"
+            },
         ),
         isLoading = isLoading,
         isSyncingDownloads = isSyncingDownloads,
@@ -252,7 +267,11 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
         ),
         summary = SummaryState(
             routesValue = visibleRoutes.size.toString(),
-            liveTrackValue = if (isTracking || navigationState.isNavigating) effectiveLiveTrack.size.toString() else "off",
+            liveTrackValue = if (isTracking || navigationState.isNavigating || breadcrumbState.isActive) {
+                effectiveLiveTrack.size.toString()
+            } else {
+                "off"
+            },
             selectedValue = selectedRoute?.distanceMeters.toDistanceLabel(),
         ),
         browseAction = BrowseActionState(
@@ -425,6 +444,31 @@ private fun RouteTrack.toNavigation3DState(
             ),
             isOffRoute = (progress?.distanceToRouteMeters ?: 0.0) >= OFF_ROUTE_ALERT_DISTANCE_METERS,
         ),
+    )
+}
+
+private fun BreadcrumbState.toNavigation3DState(): Navigation3DState? {
+    if (!isReturning) {
+        return null
+    }
+
+    val breadcrumbRoute = route ?: return null
+    val current = progress?.displayLocation ?: currentLocation
+    return breadcrumbRoute.toNavigation3DState(
+        progress = progress,
+        currentLocation = current,
+    ).copy(
+        title = "Migas de pan",
+        subtitle = "Volviendo al inicio",
+        backLabel = "Detener migas",
+        stopLabel = "Detener migas",
+        statusLabel = when {
+            progress == null -> "Esperando posición..."
+            progress.distanceToRouteMeters >= OFF_ROUTE_ALERT_DISTANCE_METERS ->
+                "Fuera del rastro (${progress.distanceToRouteMeters.toDistanceLabel()})"
+            else -> "Volviendo por tus migas"
+        },
+        isBreadcrumb = true,
     )
 }
 

@@ -12,12 +12,16 @@ import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
 import com.openroute.app.data.distanceMeters
 import com.openroute.app.data.sortedByDistanceTo
+import com.openroute.app.location.BreadcrumbService
+import com.openroute.app.location.BreadcrumbSessionStore
+import com.openroute.app.location.BreadcrumbState
 import com.openroute.app.location.LastKnownLocationReader
 import com.openroute.app.location.NavigationService
 import com.openroute.app.location.NavigationSessionStore
 import com.openroute.app.location.NavigationState
 import com.openroute.app.location.TrackingService
 import com.openroute.app.location.TrackingSessionStore
+import com.openroute.app.location.TrackingState
 import java.util.UUID
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,6 +42,7 @@ internal data class OpenRouteUiState(
     val liveTrack: List<com.openroute.app.data.LatLngPoint> = emptyList(),
     val currentLocation: com.openroute.app.data.LatLngPoint? = null,
     val navigationState: NavigationState = NavigationState(),
+    val breadcrumbState: BreadcrumbState = BreadcrumbState(),
     val showsHiddenRoutes: Boolean = false,
     val deleteRouteId: String? = null,
     val renameRouteId: String? = null,
@@ -47,12 +52,12 @@ internal data class OpenRouteUiState(
     val visibleRoutes: List<RouteTrack>
         get() = routes
             .filterNot(RouteTrack::isHidden)
-            .sortedByDistanceTo(navigationState.currentLocation ?: currentLocation)
+            .sortedByDistanceTo(navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation)
 
     val hiddenRoutes: List<RouteTrack>
         get() = routes
             .filter(RouteTrack::isHidden)
-            .sortedByDistanceTo(navigationState.currentLocation ?: currentLocation)
+            .sortedByDistanceTo(navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation)
 
     val selectedRoute: RouteTrack?
         get() = visibleRoutes.firstOrNull { it.id == selectedRouteId } ?: visibleRoutes.firstOrNull()
@@ -90,12 +95,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { current ->
                     current.copy(
                         isTracking = trackingState.isRecording,
-                        liveTrack = if (current.navigationState.isNavigating) {
-                            current.navigationState.visitedPoints
-                        } else {
-                            trackingState.points
-                        },
+                        liveTrack = current.resolveLiveTrack(trackingState = trackingState),
                         currentLocation = current.navigationState.currentLocation
+                            ?: current.breadcrumbState.currentLocation
                             ?: trackingState.currentLocation
                             ?: current.currentLocation,
                     )
@@ -108,15 +110,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { current ->
                     current.copy(
                         navigationState = navigationState,
-                        liveTrack = if (navigationState.isNavigating) {
-                            navigationState.visitedPoints
-                        } else if (current.isTracking) {
-                            TrackingSessionStore.state.value.points
-                        } else {
-                            emptyList()
-                        },
+                        liveTrack = current.copy(navigationState = navigationState)
+                            .resolveLiveTrack(trackingState = TrackingSessionStore.state.value),
                         navigation3DRouteId = if (navigationState.isNavigating) current.navigation3DRouteId else null,
                         currentLocation = navigationState.currentLocation
+                            ?: current.breadcrumbState.currentLocation
+                            ?: if (current.isTracking) {
+                                TrackingSessionStore.state.value.currentLocation
+                            } else {
+                                current.currentLocation
+                            },
+                    )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            BreadcrumbSessionStore.state.collect { breadcrumbState ->
+                _uiState.update { current ->
+                    current.copy(
+                        breadcrumbState = breadcrumbState,
+                        liveTrack = current.copy(breadcrumbState = breadcrumbState)
+                            .resolveLiveTrack(trackingState = TrackingSessionStore.state.value),
+                        currentLocation = current.navigationState.currentLocation
+                            ?: breadcrumbState.currentLocation
                             ?: if (current.isTracking) {
                                 TrackingSessionStore.state.value.currentLocation
                             } else {
@@ -274,6 +291,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 current.copy(
                     currentLocation = when {
                         current.navigationState.currentLocation != null -> current.navigationState.currentLocation
+                        current.breadcrumbState.currentLocation != null -> current.breadcrumbState.currentLocation
                         current.isTracking -> TrackingSessionStore.state.value.currentLocation ?: location
                         else -> location
                     },
@@ -351,6 +369,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startNavigation(context: Context) {
         val route = _uiState.value.detailRoute ?: _uiState.value.selectedRoute ?: return
+        if (_uiState.value.breadcrumbState.isActive) {
+            BreadcrumbService.stop(context)
+        }
         NavigationSessionStore.startSession(route)
         _uiState.update { current ->
             current.copy(
@@ -386,11 +407,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startRecording(context: Context) {
+        if (_uiState.value.breadcrumbState.isActive) {
+            BreadcrumbService.stop(context)
+        }
         TrackingService.start(context)
     }
 
     fun stopRecording(context: Context) {
         TrackingService.stop(context)
+    }
+
+    fun startBreadcrumbs(context: Context) {
+        if (_uiState.value.isTracking) {
+            TrackingService.stop(context)
+        }
+        if (_uiState.value.navigationState.isNavigating) {
+            NavigationService.stop(context)
+        }
+        _uiState.update { current ->
+            current.copy(navigation3DRouteId = null)
+        }
+        BreadcrumbService.start(context)
+    }
+
+    fun stopBreadcrumbs(context: Context) {
+        BreadcrumbService.stop(context)
     }
 
     fun showMessage(message: String) {
@@ -473,6 +514,15 @@ private fun OpenRouteUiState.resolveNextSelectedRouteId(routes: List<RouteTrack>
     return selectedRouteId
         ?.takeIf { selectedId -> routes.any { route -> route.id == selectedId && !route.isHidden } }
         ?: routes.firstOrNull { !it.isHidden }?.id
+}
+
+private fun OpenRouteUiState.resolveLiveTrack(trackingState: TrackingState): List<com.openroute.app.data.LatLngPoint> {
+    return when {
+        navigationState.isNavigating -> navigationState.visitedPoints
+        breadcrumbState.isActive -> breadcrumbState.points
+        trackingState.isRecording -> trackingState.points
+        else -> emptyList()
+    }
 }
 
 private fun com.openroute.app.data.DownloadsImportResult.toMessage(): String? {
