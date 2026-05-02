@@ -41,6 +41,9 @@
     <string name="breadcrumbs_stop">Parar migas</string>
     <string name="breadcrumbs_returning">Volviendo</string>
     <string name="breadcrumbs_stop_short">Detener migas</string>
+    <string name="breadcrumbs_stop_confirm_title">¿Detener migas?</string>
+    <string name="breadcrumbs_stop_confirm_message">El rastro temporal se perderá. No podrás usarlo después para volver.</string>
+    <string name="breadcrumbs_stop_confirm_action">Detener migas</string>
     <string name="breadcrumbs_info_active">Sembrando migas. Si te das la vuelta, la app cambiará a guía 3D para volver al punto inicial.</string>
     <string name="breadcrumbs_info_idle">Este modo guarda tu rastro temporalmente para poder volver por donde viniste sin crear una ruta guardada.</string>
     <string name="breadcrumbs_duration_label">Tiempo migas</string>

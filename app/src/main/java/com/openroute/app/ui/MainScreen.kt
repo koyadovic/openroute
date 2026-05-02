@@ -93,6 +93,10 @@ fun MainRoute(viewModel: MainViewModel) {
     val appVersionLabel = remember(context) { context.resolveAppVersionLabel() }
     var downloadsAccessState by remember { mutableStateOf(context.resolveDownloadsAccessState()) }
     var trackingSetupDialogState by remember { mutableStateOf<TrackingSetupDialogState?>(null) }
+    var showStopBreadcrumbsDialog by rememberSaveable { mutableStateOf(false) }
+    val requestStopBreadcrumbs = {
+        showStopBreadcrumbsDialog = true
+    }
 
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -293,14 +297,21 @@ fun MainRoute(viewModel: MainViewModel) {
         }
     }
 
+    LaunchedEffect(screenState.actionBar.isBreadcrumbing) {
+        if (!screenState.actionBar.isBreadcrumbing) {
+            showStopBreadcrumbsDialog = false
+        }
+    }
+
     BackHandler(
-        enabled = screenState.mode == OpenRouteScreenMode.Detail ||
-            screenState.mode == OpenRouteScreenMode.Navigation3D,
+        enabled = !showStopBreadcrumbsDialog &&
+            (screenState.mode == OpenRouteScreenMode.Detail ||
+                screenState.mode == OpenRouteScreenMode.Navigation3D),
     ) {
         when (screenState.mode) {
             OpenRouteScreenMode.Detail -> viewModel.closeRouteDetail()
             OpenRouteScreenMode.Navigation3D -> if (screenState.navigation3DState?.isBreadcrumb == true) {
-                viewModel.stopBreadcrumbs(context)
+                requestStopBreadcrumbs()
             } else {
                 viewModel.closeNavigation3D()
             }
@@ -339,7 +350,7 @@ fun MainRoute(viewModel: MainViewModel) {
         },
         onBreadcrumbClick = {
             if (screenState.actionBar.isBreadcrumbing) {
-                viewModel.stopBreadcrumbs(context)
+                requestStopBreadcrumbs()
             } else {
                 context.withPreciseLocationPermission(
                     permissions = locationPermissions,
@@ -401,14 +412,14 @@ fun MainRoute(viewModel: MainViewModel) {
         },
         onStopNavigationClick = {
             if (screenState.navigation3DState?.isBreadcrumb == true) {
-                viewModel.stopBreadcrumbs(context)
+                requestStopBreadcrumbs()
             } else {
                 viewModel.stopNavigation(context)
             }
         },
         onCloseNavigation3DClick = {
             if (screenState.navigation3DState?.isBreadcrumb == true) {
-                viewModel.stopBreadcrumbs(context)
+                requestStopBreadcrumbs()
             } else {
                 viewModel.closeNavigation3D()
             }
@@ -446,6 +457,18 @@ fun MainRoute(viewModel: MainViewModel) {
                     }
                 }
                 trackingSetupDialogState = null
+            },
+        )
+    }
+
+    if (showStopBreadcrumbsDialog) {
+        StopBreadcrumbsDialog(
+            onConfirm = {
+                showStopBreadcrumbsDialog = false
+                viewModel.stopBreadcrumbs(context)
+            },
+            onDismiss = {
+                showStopBreadcrumbsDialog = false
             },
         )
     }
@@ -1100,27 +1123,39 @@ private fun Navigation3DScreen(
             .padding(bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            OutlinedButton(
-                onClick = onCloseClick,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = state.backLabel,
-                    maxLines = 1,
-                )
-            }
+        if (state.isBreadcrumb) {
             Button(
                 onClick = onStopNavigationClick,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     text = state.stopLabel,
                     maxLines = 1,
                 )
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onCloseClick,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = state.backLabel,
+                        maxLines = 1,
+                    )
+                }
+                Button(
+                    onClick = onStopNavigationClick,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = state.stopLabel,
+                        maxLines = 1,
+                    )
+                }
             }
         }
 
@@ -1431,6 +1466,28 @@ private fun TrackingSetupDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(state.dismissLabel)
+            }
+        },
+    )
+}
+
+@Composable
+private fun StopBreadcrumbsDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.breadcrumbs_stop_confirm_title)) },
+        text = { Text(stringResource(R.string.breadcrumbs_stop_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.breadcrumbs_stop_confirm_action))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
             }
         },
     )

@@ -41,6 +41,9 @@
     <string name="breadcrumbs_stop">Stop breadcrumbs</string>
     <string name="breadcrumbs_returning">Returning</string>
     <string name="breadcrumbs_stop_short">Stop breadcrumbs</string>
+    <string name="breadcrumbs_stop_confirm_title">Stop breadcrumbs?</string>
+    <string name="breadcrumbs_stop_confirm_message">The temporary trail will be discarded. You will not be able to use it to return later.</string>
+    <string name="breadcrumbs_stop_confirm_action">Stop breadcrumbs</string>
     <string name="breadcrumbs_info_active">Leaving breadcrumbs. If you turn back, the app will switch to 3D guidance back to the starting point.</string>
     <string name="breadcrumbs_info_idle">This mode keeps a temporary trail so you can return the way you came without creating a saved route.</string>
     <string name="breadcrumbs_duration_label">Breadcrumb time</string>
