@@ -481,6 +481,18 @@ fun OpenRouteScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val showsDrawer = state.mode.isPrimaryMode()
+    val showsNavigationOffRouteAlert = state.mode == OpenRouteScreenMode.Navigation3D &&
+        state.navigation3DState?.showsOffRouteAlert == true
+    val screenBackgroundColor = if (showsNavigationOffRouteAlert) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+    val screenContentColor = if (showsNavigationOffRouteAlert) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onBackground
+    }
 
     BackHandler(enabled = drawerState.isOpen) {
         coroutineScope.launch { drawerState.close() }
@@ -507,12 +519,13 @@ fun OpenRouteScreen(
         },
     ) {
         Scaffold(
+            containerColor = screenBackgroundColor,
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
             topBar = {
                 TopAppBar(
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        containerColor = screenBackgroundColor,
+                        titleContentColor = screenContentColor,
                     ),
                     navigationIcon = {
                         if (showsDrawer) {
@@ -564,7 +577,7 @@ fun OpenRouteScreen(
         ) { paddingValues ->
             val contentModifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(screenBackgroundColor)
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp, vertical = 8.dp)
 
