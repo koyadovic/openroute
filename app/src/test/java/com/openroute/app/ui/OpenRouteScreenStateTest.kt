@@ -50,7 +50,7 @@ class OpenRouteScreenStateTest {
         assertTrue(screenState.isSyncingDownloads)
         assertFalse(screenState.actionBar.isImportEnabled)
         assertTrue(screenState.actionBar.showsImportProgress)
-        assertEquals("Start recording", screenState.actionBar.trackLabel)
+        assertEquals("Record", screenState.actionBar.trackLabel)
         assertEquals("1", screenState.summary.routesValue)
         assertEquals("off", screenState.summary.liveTrackValue)
         assertEquals("Route saved", screenState.snackbarMessage)

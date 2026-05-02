@@ -10,6 +10,7 @@ internal interface OpenRouteTextProvider {
     val startRecording: String
     val stopRecording: String
     val breadcrumbs: String
+    val breadcrumbsStart: String
     val breadcrumbsStop: String
     val breadcrumbsReturning: String
     val routes: String
@@ -73,6 +74,7 @@ internal class AndroidOpenRouteTextProvider(
     override val startRecording: String get() = context.getString(R.string.start_recording)
     override val stopRecording: String get() = context.getString(R.string.stop_recording)
     override val breadcrumbs: String get() = context.getString(R.string.breadcrumbs_start)
+    override val breadcrumbsStart: String get() = context.getString(R.string.breadcrumbs_action_start)
     override val breadcrumbsStop: String get() = context.getString(R.string.breadcrumbs_stop)
     override val breadcrumbsReturning: String get() = context.getString(R.string.breadcrumbs_returning)
     override val routes: String get() = context.getString(R.string.summary_routes)
@@ -176,9 +178,10 @@ internal object EnglishOpenRouteTextProvider : OpenRouteTextProvider {
     override val appTitle = "OpenRoute"
     override val appSubtitle = "Local GPX, OSM map and route recording"
     override val importGpx = "Import GPX"
-    override val startRecording = "Start recording"
+    override val startRecording = "Record"
     override val stopRecording = "Stop recording"
     override val breadcrumbs = "Breadcrumbs"
+    override val breadcrumbsStart = "Start"
     override val breadcrumbsStop = "Stop breadcrumbs"
     override val breadcrumbsReturning = "Returning"
     override val routes = "Routes"

@@ -288,7 +288,7 @@ internal fun OpenRouteUiState.toScreenState(
             breadcrumbLabel = when {
                 breadcrumbState.isReturning -> text.breadcrumbsReturning
                 breadcrumbState.isActive -> text.breadcrumbsStop
-                else -> text.breadcrumbs
+                else -> text.breadcrumbsStart
             },
             importLabel = text.importGpx,
         ),

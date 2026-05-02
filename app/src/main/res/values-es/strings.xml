@@ -25,7 +25,7 @@
     <string name="recording_subtitle_active">Grabando recorrido local</string>
     <string name="recording_subtitle_idle">Registra una ruta nueva</string>
     <string name="recording_drawer_subtitle">Registra una nueva salida</string>
-    <string name="start_recording">Iniciar grabación</string>
+    <string name="start_recording">Grabar</string>
     <string name="stop_recording">Detener grabación</string>
     <string name="recording_info_active">Grabando ruta localmente. Puedes bloquear la pantalla si la ubicación está en Permitir siempre y la batería sin restricciones.</string>
     <string name="recording_info_idle">Inicia una grabación para guardar una ruta nueva con distancia, tiempo y puntos registrados.</string>
@@ -37,6 +37,7 @@
     <string name="breadcrumbs_subtitle_active">Sembrando rastro</string>
     <string name="breadcrumbs_subtitle_idle">Deja un rastro para volver</string>
     <string name="breadcrumbs_start">Migas de pan</string>
+    <string name="breadcrumbs_action_start">Iniciar</string>
     <string name="breadcrumbs_stop">Parar migas</string>
     <string name="breadcrumbs_returning">Volviendo</string>
     <string name="breadcrumbs_stop_short">Detener migas</string>

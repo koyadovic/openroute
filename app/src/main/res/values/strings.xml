@@ -25,7 +25,7 @@
     <string name="recording_subtitle_active">Recording local track</string>
     <string name="recording_subtitle_idle">Record a new route</string>
     <string name="recording_drawer_subtitle">Record a new outing</string>
-    <string name="start_recording">Start recording</string>
+    <string name="start_recording">Record</string>
     <string name="stop_recording">Stop recording</string>
     <string name="recording_info_active">Recording route locally. You can lock the screen if Location is set to Always allow and battery is unrestricted.</string>
     <string name="recording_info_idle">Start a recording to save a new route with distance, duration and tracked points.</string>
@@ -37,6 +37,7 @@
     <string name="breadcrumbs_subtitle_active">Leaving trail</string>
     <string name="breadcrumbs_subtitle_idle">Leave a trail to return</string>
     <string name="breadcrumbs_start">Breadcrumbs</string>
+    <string name="breadcrumbs_action_start">Start</string>
     <string name="breadcrumbs_stop">Stop breadcrumbs</string>
     <string name="breadcrumbs_returning">Returning</string>
     <string name="breadcrumbs_stop_short">Stop breadcrumbs</string>
