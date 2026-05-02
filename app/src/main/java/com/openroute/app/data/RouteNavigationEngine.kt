@@ -3,7 +3,6 @@ package com.openroute.app.data
 import kotlin.math.PI
 import kotlin.math.asin
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.math.roundToLong
 import kotlin.math.sin
@@ -29,12 +28,39 @@ data class RouteNavigationProgress(
     val travelDirection: RouteTravelDirection = RouteTravelDirection.Forward,
 )
 
+internal data class RouteNavigationGeometry(
+    val route: RouteTrack,
+    val cumulativeDistances: List<Double>,
+    val isLoopRoute: Boolean,
+)
+
 object RouteNavigationEngine {
+    internal fun prepare(route: RouteTrack): RouteNavigationGeometry {
+        return RouteNavigationGeometry(
+            route = route,
+            cumulativeDistances = route.points.cumulativeDistances(),
+            isLoopRoute = route.points.isClosedLoop(),
+        )
+    }
+
     fun calculate(
         route: RouteTrack,
         currentLocation: LatLngPoint,
         recentLocations: List<LatLngPoint>,
     ): RouteNavigationProgress {
+        return calculate(
+            geometry = prepare(route),
+            currentLocation = currentLocation,
+            recentLocations = recentLocations,
+        )
+    }
+
+    internal fun calculate(
+        geometry: RouteNavigationGeometry,
+        currentLocation: LatLngPoint,
+        recentLocations: List<LatLngPoint>,
+    ): RouteNavigationProgress {
+        val route = geometry.route
         if (route.points.isEmpty()) {
             return RouteNavigationProgress(
                 nearestRoutePointIndex = 0,
@@ -48,14 +74,14 @@ object RouteNavigationEngine {
             )
         }
 
-        val cumulativeDistances = route.points.cumulativeDistances()
+        val cumulativeDistances = geometry.cumulativeDistances
         val totalDistance = route.distanceMeters.takeIf { it > 0.0 }
             ?: cumulativeDistances.lastOrNull()
             ?: 0.0
 
         val nearestProjection = route.points.closestProjectionTo(currentLocation)
         val nearestIndex = nearestProjection.nearestRoutePointIndex
-        val isLoopRoute = route.points.isClosedLoop()
+        val isLoopRoute = geometry.isLoopRoute
 
         val forwardDistanceAlongRoute = (cumulativeDistances.getOrElse(nearestProjection.segmentStartIndex) { 0.0 } +
             nearestProjection.distanceAlongSegmentMeters)
@@ -66,20 +92,18 @@ object RouteNavigationEngine {
         } else {
             currentLocation
         }
-        val currentSpeed = (recentLocations + displayLocation)
-            .takeLast(MAX_SPEED_SAMPLES)
-            .estimateSpeedMetersPerSecond()
+        val currentSpeed = recentLocations.estimateSpeedMetersPerSecond(displayLocation)
         val routeHeadingForward = route.points.headingDegreesForSegment(nearestProjection.segmentStartIndex)
         val routeHeadingBackward = routeHeadingForward?.let(::reverseHeadingDegrees)
-        val movementHeading = (recentLocations + displayLocation)
-            .takeLast(MAX_HEADING_SAMPLES)
-            .movementHeadingDegrees()
+        val movementHeading = recentLocations.movementHeadingDegrees(displayLocation)
         val sensorHeading = currentLocation.bearingDegrees?.normalizeHeadingDegrees()
-        val recentRouteDistances = recentLocations
-            .takeLast(MAX_ROUTE_PROGRESS_SAMPLES)
-            .map { location ->
-                route.points.closestProjectionTo(location).distanceAlongRouteMeters(cumulativeDistances)
-            } + forwardDistanceAlongRoute
+        val recentRouteDistances = buildList(MAX_ROUTE_PROGRESS_SAMPLES + 1) {
+            val startIndex = (recentLocations.size - MAX_ROUTE_PROGRESS_SAMPLES).coerceAtLeast(0)
+            for (index in startIndex until recentLocations.size) {
+                add(route.points.closestProjectionTo(recentLocations[index]).distanceAlongRouteMeters(cumulativeDistances))
+            }
+            add(forwardDistanceAlongRoute)
+        }
         val travelDirection = resolveTravelDirection(
             recentRouteDistances = recentRouteDistances,
             totalDistance = totalDistance,
@@ -167,23 +191,29 @@ private fun List<LatLngPoint>.closestProjectionTo(referencePoint: LatLngPoint): 
         )
     }
 
-    return (0 until lastIndex)
-        .map { segmentStartIndex ->
-            projectPointOntoSegment(
-                referencePoint = referencePoint,
-                segmentStart = get(segmentStartIndex),
-                segmentEnd = get(segmentStartIndex + 1),
-                segmentStartIndex = segmentStartIndex,
-            )
-        }
-        .minByOrNull(RouteProjection::distanceToRouteMeters)
-        ?: RouteProjection(
-            segmentStartIndex = 0,
-            nearestRoutePointIndex = 0,
-            projectedPoint = first(),
-            distanceAlongSegmentMeters = 0.0,
-            distanceToRouteMeters = referencePoint.distanceTo(first()),
+    var closestProjection: RouteProjection? = null
+    for (segmentStartIndex in 0 until lastIndex) {
+        val projection = projectPointOntoSegment(
+            referencePoint = referencePoint,
+            segmentStart = get(segmentStartIndex),
+            segmentEnd = get(segmentStartIndex + 1),
+            segmentStartIndex = segmentStartIndex,
         )
+        if (
+            closestProjection == null ||
+            projection.distanceToRouteMeters < closestProjection.distanceToRouteMeters
+        ) {
+            closestProjection = projection
+        }
+    }
+
+    return closestProjection ?: RouteProjection(
+        segmentStartIndex = 0,
+        nearestRoutePointIndex = 0,
+        projectedPoint = first(),
+        distanceAlongSegmentMeters = 0.0,
+        distanceToRouteMeters = referencePoint.distanceTo(first()),
+    )
 }
 
 private fun projectPointOntoSegment(
@@ -202,7 +232,7 @@ private fun projectPointOntoSegment(
 
     val segmentVectorX = end.x - start.x
     val segmentVectorY = end.y - start.y
-    val segmentLengthSquared = segmentVectorX.pow(2) + segmentVectorY.pow(2)
+    val segmentLengthSquared = (segmentVectorX * segmentVectorX) + (segmentVectorY * segmentVectorY)
 
     if (segmentLengthSquared == 0.0) {
         return RouteProjection(
@@ -233,19 +263,40 @@ private fun projectPointOntoSegment(
         nearestRoutePointIndex = if (t < 0.5) segmentStartIndex else segmentStartIndex + 1,
         projectedPoint = projectedPoint,
         distanceAlongSegmentMeters = segmentLengthMeters * t,
-        distanceToRouteMeters = sqrt((point.x - projectedX).pow(2) + (point.y - projectedY).pow(2)),
+        distanceToRouteMeters = sqrt(
+            ((point.x - projectedX) * (point.x - projectedX)) +
+                ((point.y - projectedY) * (point.y - projectedY)),
+        ),
     )
 }
 
-private fun List<LatLngPoint>.estimateSpeedMetersPerSecond(): Double? {
-    val samples = filter { it.timestampMillis != null }
+private fun List<LatLngPoint>.estimateSpeedMetersPerSecond(latestPoint: LatLngPoint): Double? {
+    val samples = ArrayList<LatLngPoint>(MAX_SPEED_SAMPLES)
+    var inspectedSamples = 0
+
+    fun collectSample(point: LatLngPoint): Boolean {
+        inspectedSamples += 1
+        if (point.timestampMillis != null) {
+            samples.add(point)
+        }
+        return inspectedSamples < MAX_SPEED_SAMPLES
+    }
+
+    if (collectSample(latestPoint)) {
+        for (index in lastIndex downTo 0) {
+            if (!collectSample(this[index])) {
+                break
+            }
+        }
+    }
+
     if (samples.size < 2) {
         return null
     }
 
-    val window = samples.takeLast(MAX_SPEED_SAMPLES)
-    val first = window.first()
-    val last = window.last()
+    samples.reverse()
+    val first = samples.first()
+    val last = samples.last()
     val startTime = first.timestampMillis ?: return null
     val endTime = last.timestampMillis ?: return null
     val elapsedSeconds = (endTime - startTime) / 1000.0
@@ -254,22 +305,29 @@ private fun List<LatLngPoint>.estimateSpeedMetersPerSecond(): Double? {
         return null
     }
 
-    val distanceMeters = window.zipWithNext { start, end -> start.distanceTo(end) }.sum()
+    var distanceMeters = 0.0
+    for (index in 1 until samples.size) {
+        distanceMeters += samples[index - 1].distanceTo(samples[index])
+    }
     return distanceMeters / elapsedSeconds
 }
 
-private fun List<LatLngPoint>.movementHeadingDegrees(): Double? {
-    if (size < 2) {
+private fun List<LatLngPoint>.movementHeadingDegrees(latestPoint: LatLngPoint): Double? {
+    if (isEmpty()) {
         return null
     }
 
-    val latestPoint = last()
-    val anchorPoint = asReversed()
-        .drop(1)
-        .firstOrNull { candidate ->
-            candidate.distanceTo(latestPoint) >= MIN_HEADING_DISTANCE_METERS
+    var anchorPoint: LatLngPoint? = null
+    val oldestIndex = (size - (MAX_HEADING_SAMPLES - 1)).coerceAtLeast(0)
+    for (index in lastIndex downTo oldestIndex) {
+        val candidate = this[index]
+        if (candidate.distanceTo(latestPoint) >= MIN_HEADING_DISTANCE_METERS) {
+            anchorPoint = candidate
+            break
         }
-        ?: return null
+    }
+
+    anchorPoint ?: return null
 
     return anchorPoint.headingDegreesTo(latestPoint)
 }
@@ -292,8 +350,10 @@ private fun LatLngPoint.distanceTo(other: LatLngPoint): Double {
     val startLat = latitude.toRadians()
     val endLat = other.latitude.toRadians()
 
-    val a = sin(latDistance / 2).pow(2) +
-        cos(startLat) * cos(endLat) * sin(lonDistance / 2).pow(2)
+    val sinHalfLat = sin(latDistance / 2)
+    val sinHalfLon = sin(lonDistance / 2)
+    val a = (sinHalfLat * sinHalfLat) +
+        cos(startLat) * cos(endLat) * (sinHalfLon * sinHalfLon)
 
     return 2 * earthRadiusMeters * asin(kotlin.math.sqrt(a.coerceIn(0.0, 1.0)))
 }
@@ -401,21 +461,22 @@ private fun resolveRouteDistanceDelta(
     }
 
     val latestDistance = routeDistances.last()
-    return routeDistances
-        .asReversed()
-        .drop(1)
-        .map { candidateDistance ->
-            if (isLoopRoute) {
-                circularDistanceDelta(
-                    fromDistance = candidateDistance,
-                    toDistance = latestDistance,
-                    totalDistance = totalDistance,
-                )
-            } else {
-                latestDistance - candidateDistance
-            }
+    for (index in routeDistances.lastIndex - 1 downTo 0) {
+        val candidateDistance = routeDistances[index]
+        val routeDistanceDelta = if (isLoopRoute) {
+            circularDistanceDelta(
+                fromDistance = candidateDistance,
+                toDistance = latestDistance,
+                totalDistance = totalDistance,
+            )
+        } else {
+            latestDistance - candidateDistance
         }
-        .firstOrNull { kotlin.math.abs(it) >= MIN_ROUTE_DISTANCE_PROGRESS_METERS }
+        if (kotlin.math.abs(routeDistanceDelta) >= MIN_ROUTE_DISTANCE_PROGRESS_METERS) {
+            return routeDistanceDelta
+        }
+    }
+    return null
 }
 
 private fun circularDistanceDelta(

@@ -2,6 +2,7 @@ package com.openroute.app.location
 
 import com.openroute.app.data.LatLngPoint
 import com.openroute.app.data.RouteNavigationEngine
+import com.openroute.app.data.RouteNavigationGeometry
 import com.openroute.app.data.RouteNavigationProgress
 import com.openroute.app.data.RouteTrack
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +20,10 @@ data class NavigationState(
 object NavigationSessionStore {
     private val _state = MutableStateFlow(NavigationState())
     val state = _state.asStateFlow()
+    private var routeGeometry: RouteNavigationGeometry? = null
 
     fun startSession(route: RouteTrack) {
+        routeGeometry = RouteNavigationEngine.prepare(route)
         _state.value = NavigationState(
             isNavigating = true,
             route = route,
@@ -36,8 +39,11 @@ object NavigationSessionStore {
             if (!current.isNavigating || route == null) {
                 current
             } else {
+                val geometry = routeGeometry
+                    ?.takeIf { geometry -> geometry.route.id == route.id }
+                    ?: RouteNavigationEngine.prepare(route).also { routeGeometry = it }
                 val progress = RouteNavigationEngine.calculate(
-                    route = route,
+                    geometry = geometry,
                     currentLocation = point,
                     recentLocations = current.visitedPoints,
                 )
@@ -57,12 +63,14 @@ object NavigationSessionStore {
     }
 
     fun finishSession() {
+        routeGeometry = null
         _state.value = NavigationState()
     }
 
     fun refreshRoute(route: RouteTrack) {
         _state.update { current ->
             if (current.route?.id == route.id) {
+                routeGeometry = RouteNavigationEngine.prepare(route)
                 current.copy(route = route)
             } else {
                 current

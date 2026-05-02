@@ -3,7 +3,6 @@ package com.openroute.app.data
 import kotlin.math.PI
 import kotlin.math.asin
 import kotlin.math.cos
-import kotlin.math.pow
 import kotlin.math.sin
 import kotlinx.serialization.Serializable
 
@@ -82,14 +81,20 @@ fun List<RouteTrack>.sortedByDistanceTo(referencePoint: LatLngPoint?): List<Rout
         return this
     }
 
-    return withIndex()
+    return mapIndexed { index, route ->
+        RouteDistance(
+            route = route,
+            index = index,
+            distanceMeters = route.closestDistanceMetersTo(referencePoint) ?: Double.MAX_VALUE,
+        )
+    }
         .sortedWith(
-            compareBy<IndexedValue<RouteTrack>>(
-                { indexedRoute -> indexedRoute.value.closestDistanceMetersTo(referencePoint) ?: Double.MAX_VALUE },
-                IndexedValue<RouteTrack>::index,
+            compareBy<RouteDistance>(
+                RouteDistance::distanceMeters,
+                RouteDistance::index,
             ),
         )
-        .map(IndexedValue<RouteTrack>::value)
+        .map(RouteDistance::route)
 }
 
 fun List<LatLngPoint>.distanceMeters(): Double {
@@ -97,14 +102,18 @@ fun List<LatLngPoint>.distanceMeters(): Double {
         return 0.0
     }
 
-    return zipWithNext { start, end ->
-        haversineMeters(
+    var distance = 0.0
+    for (index in 1 until size) {
+        val start = this[index - 1]
+        val end = this[index]
+        distance += haversineMeters(
             startLatitude = start.latitude,
             startLongitude = start.longitude,
             endLatitude = end.latitude,
             endLongitude = end.longitude,
         )
-    }.sum()
+    }
+    return distance
 }
 
 fun List<LatLngPoint>.durationMillis(): Long? {
@@ -112,23 +121,56 @@ fun List<LatLngPoint>.durationMillis(): Long? {
         return null
     }
 
-    val firstTimestamp = firstOrNull { it.timestampMillis != null }?.timestampMillis ?: return null
-    val lastTimestamp = lastOrNull { it.timestampMillis != null }?.timestampMillis ?: return null
-    val duration = lastTimestamp - firstTimestamp
+    var firstTimestamp: Long? = null
+    for (point in this) {
+        val timestamp = point.timestampMillis
+        if (timestamp != null) {
+            firstTimestamp = timestamp
+            break
+        }
+    }
+
+    var lastTimestamp: Long? = null
+    for (index in indices.reversed()) {
+        val timestamp = this[index].timestampMillis
+        if (timestamp != null) {
+            lastTimestamp = timestamp
+            break
+        }
+    }
+
+    val first = firstTimestamp ?: return null
+    val last = lastTimestamp ?: return null
+    val duration = last - first
 
     return duration.takeIf { it > 0L }
 }
 
 fun RouteTrack.closestDistanceMetersTo(referencePoint: LatLngPoint): Double? {
-    return points.minOfOrNull { point ->
-        haversineMeters(
+    if (points.isEmpty()) {
+        return null
+    }
+
+    var closestDistance = Double.MAX_VALUE
+    for (point in points) {
+        val distance = haversineMeters(
             startLatitude = referencePoint.latitude,
             startLongitude = referencePoint.longitude,
             endLatitude = point.latitude,
             endLongitude = point.longitude,
         )
+        if (distance < closestDistance) {
+            closestDistance = distance
+        }
     }
+    return closestDistance
 }
+
+private data class RouteDistance(
+    val route: RouteTrack,
+    val index: Int,
+    val distanceMeters: Double,
+)
 
 private fun haversineMeters(
     startLatitude: Double,
@@ -143,8 +185,10 @@ private fun haversineMeters(
     val startLat = startLatitude.toRadians()
     val endLat = endLatitude.toRadians()
 
-    val a = sin(latDistance / 2).pow(2) +
-        cos(startLat) * cos(endLat) * sin(lonDistance / 2).pow(2)
+    val sinHalfLat = sin(latDistance / 2)
+    val sinHalfLon = sin(lonDistance / 2)
+    val a = (sinHalfLat * sinHalfLat) +
+        cos(startLat) * cos(endLat) * (sinHalfLon * sinHalfLon)
 
     return 2 * earthRadiusMeters * asin(a.coerceIn(0.0, 1.0).let { kotlin.math.sqrt(it) })
 }

@@ -77,8 +77,10 @@ fun MapWebView(
             }
         },
         update = { webView ->
-            webView.tag = stateJson
-            webView.evaluateMapState()
+            if (webView.tag != stateJson) {
+                webView.tag = stateJson
+                webView.evaluateMapState()
+            }
         },
     )
 }
