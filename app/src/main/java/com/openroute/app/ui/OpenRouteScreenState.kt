@@ -155,6 +155,7 @@ data class OpenRouteScreenState(
     val header: HeaderState = HeaderState(),
     val actionBar: ActionBarState = ActionBarState(),
     val isLoading: Boolean = true,
+    val isInitialLoading: Boolean = true,
     val isSyncingDownloads: Boolean = false,
     val mapState: MapRenderState = MapRenderState(),
     val summary: SummaryState = SummaryState(),
@@ -294,6 +295,7 @@ internal fun OpenRouteUiState.toScreenState(
             importLabel = text.importGpx,
         ),
         isLoading = isLoading,
+        isInitialLoading = isLoading || !hasCompletedInitialDownloadsCheck,
         isSyncingDownloads = isSyncingDownloads,
         mapState = MapRenderState(
             routes = mapRoutes.map { route ->

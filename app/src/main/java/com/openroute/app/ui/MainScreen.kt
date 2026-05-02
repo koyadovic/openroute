@@ -256,9 +256,19 @@ fun MainRoute(viewModel: MainViewModel) {
             }
         },
     )
+    val runInitialDownloadsCheck = rememberUpdatedState(
+        newValue = {
+            downloadsAccessState = context.resolveDownloadsAccessState()
+            if (downloadsAccessState == DownloadsAccessState.Granted) {
+                viewModel.syncDownloadedGpxFiles(isInitialSync = true)
+            } else {
+                viewModel.completeInitialDownloadsCheck()
+            }
+        },
+    )
 
     LaunchedEffect(Unit) {
-        refreshDownloadsSync.value()
+        runInitialDownloadsCheck.value()
         if (context.hasLocationPermission()) {
             refreshCurrentLocation.value()
         } else if (!hasRequestedStartupLocation) {
@@ -501,6 +511,11 @@ fun OpenRouteScreen(
     onCloseNavigation3DClick: () -> Unit,
     onRouteClick: (String) -> Unit,
 ) {
+    if (state.isInitialLoading) {
+        StartupLoadingScreen()
+        return
+    }
+
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val coroutineScope = rememberCoroutineScope()
     val showsDrawer = state.mode.isPrimaryMode()
@@ -651,6 +666,18 @@ fun OpenRouteScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun StartupLoadingScreen(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator()
     }
 }
 

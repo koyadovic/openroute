@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 
 internal data class OpenRouteUiState(
     val isLoading: Boolean = true,
+    val hasCompletedInitialDownloadsCheck: Boolean = false,
     val isImporting: Boolean = false,
     val isSyncingDownloads: Boolean = false,
     val isTracking: Boolean = false,
@@ -290,8 +291,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(detailRouteId = null, renameRouteId = null, renameDraft = "") }
     }
 
-    fun syncDownloadedGpxFiles() {
+    fun completeInitialDownloadsCheck() {
+        _uiState.update { current ->
+            current.copy(hasCompletedInitialDownloadsCheck = true)
+        }
+    }
+
+    fun syncDownloadedGpxFiles(isInitialSync: Boolean = false) {
         if (_uiState.value.isSyncingDownloads) {
+            if (isInitialSync) {
+                completeInitialDownloadsCheck()
+            }
             return
         }
 
@@ -309,6 +319,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { current ->
                 current.copy(
                     isLoading = false,
+                    hasCompletedInitialDownloadsCheck = current.hasCompletedInitialDownloadsCheck || isInitialSync,
                     isSyncingDownloads = false,
                     routes = routes,
                     selectedRouteId = current.resolveSelectionAfterImports(routes, importResult.importedRoutes),
