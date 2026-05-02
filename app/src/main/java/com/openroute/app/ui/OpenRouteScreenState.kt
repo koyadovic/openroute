@@ -29,6 +29,7 @@ enum class OpenRouteMainSection {
 data class HeaderState(
     val title: String = "",
     val subtitle: String = "",
+    val isTitleEditable: Boolean = false,
 )
 
 data class ActionBarState(
@@ -104,8 +105,6 @@ data class RouteDetailState(
     val canDelete: Boolean = true,
     val hideLabel: String = "",
     val deleteLabel: String = "",
-    val canRename: Boolean = false,
-    val renameLabel: String = "",
     val renameDialog: RouteRenameDialogState? = null,
     val deleteDialog: HiddenRouteDeleteDialogState? = null,
     val backLabel: String = "",
@@ -257,6 +256,7 @@ internal fun OpenRouteUiState.toScreenState(
             detailRoute != null -> HeaderState(
                 title = detailRoute.name,
                 subtitle = detailRoute.metricsSubtitle(text),
+                isTitleEditable = true,
             )
 
             mainSection == OpenRouteMainSection.Routes -> HeaderState(
@@ -424,9 +424,7 @@ private fun RouteTrack.toDetailState(
         canDelete = true,
         hideLabel = text.routeHide,
         deleteLabel = text.routeDelete,
-        canRename = source == RouteSource.RECORDED,
-        renameLabel = text.routeRename,
-        renameDialog = renameDraft?.takeIf { source == RouteSource.RECORDED }?.let { draft ->
+        renameDialog = renameDraft?.let { draft ->
             RouteRenameDialogState(
                 title = text.routeRenameTitle,
                 name = draft,

@@ -131,6 +131,7 @@ class OpenRouteScreenStateTest {
         assertEquals(OpenRouteScreenMode.Detail, screenState.mode)
         assertEquals("Sierra Loop", screenState.header.title)
         assertEquals("10.0 km · 1h 30m · 3 points", screenState.header.subtitle)
+        assertTrue(screenState.header.isTitleEditable)
         assertEquals("10.0 km", screenState.detailState?.distanceLabel)
         assertEquals("1h 30m", screenState.detailState?.durationLabel)
         assertEquals("sierra-loop.gpx", screenState.detailState?.fileLabel)
@@ -151,7 +152,7 @@ class OpenRouteScreenStateTest {
     }
 
     @Test
-    fun `shows rename affordance for recorded detail route`() {
+    fun `shows rename dialog for detail route title`() {
         val route = RouteTrack(
             id = "route-rename",
             name = "Ride 1",
@@ -173,7 +174,7 @@ class OpenRouteScreenStateTest {
             renameDraft = "Ride cerca de casa",
         ).toScreenState()
 
-        assertTrue(screenState.detailState?.canRename == true)
+        assertTrue(screenState.header.isTitleEditable)
         assertEquals("Ride cerca de casa", screenState.detailState?.renameDialog?.name)
         assertTrue(screenState.detailState?.renameDialog?.isConfirmEnabled == true)
     }

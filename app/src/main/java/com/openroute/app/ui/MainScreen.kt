@@ -531,7 +531,12 @@ fun OpenRouteScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column {
+                            Column(
+                                modifier = Modifier.clickable(
+                                    enabled = state.header.isTitleEditable,
+                                    onClick = onOpenRenameRouteClick,
+                                ),
+                            ) {
                                 if (state.header.title == stringResource(R.string.app_name)) {
                                     OpenRouteWordmark(
                                         style = MaterialTheme.typography.headlineSmall.copy(
@@ -588,7 +593,6 @@ fun OpenRouteScreen(
                     state = state.detailState,
                     mapState = state.mapState,
                     onCloseDetailClick = onCloseDetailClick,
-                    onOpenRenameRouteClick = onOpenRenameRouteClick,
                     onRenameDraftChange = onRenameDraftChange,
                     onConfirmRenameRouteClick = onConfirmRenameRouteClick,
                     onDismissRenameRouteClick = onDismissRenameRouteClick,
@@ -900,7 +904,6 @@ private fun RouteDetailScreen(
     state: RouteDetailState?,
     mapState: com.openroute.app.data.MapRenderState,
     onCloseDetailClick: () -> Unit,
-    onOpenRenameRouteClick: () -> Unit,
     onRenameDraftChange: (String) -> Unit,
     onConfirmRenameRouteClick: () -> Unit,
     onDismissRenameRouteClick: () -> Unit,
@@ -941,33 +944,19 @@ private fun RouteDetailScreen(
             )
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        if (state.fileLabel != null) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
             ) {
-                Text(
-                    text = state.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = state.subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (state.fileLabel != null) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Text(
                         text = stringResource(R.string.route_file_label, state.fileLabel),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                }
-                if (state.canRename) {
-                    OutlinedButton(onClick = onOpenRenameRouteClick) {
-                        Text(state.renameLabel)
-                    }
                 }
             }
         }

@@ -494,7 +494,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openRenameRoute() {
-        val route = _uiState.value.detailRoute?.takeIf { it.source == RouteSource.RECORDED } ?: return
+        val route = _uiState.value.detailRoute ?: return
         _uiState.update { current ->
             current.copy(
                 renameRouteId = route.id,
