@@ -199,6 +199,16 @@ internal object BreadcrumbTrailEngine {
                 recentLocations = recentLocations,
             )
         }
+        val returnProgress = progress?.let { currentProgress ->
+            route?.let { currentRoute -> currentProgress.asReturnProgress(currentRoute) }
+        }
+        if (
+            returnProgress != null &&
+            returnProgress.distanceToRouteMeters <= RETURNING_ROUTE_SNAP_DISTANCE_METERS &&
+            returnProgress.remainingDistanceMeters <= RETURN_ARRIVAL_DISTANCE_METERS
+        ) {
+            return stop()
+        }
 
         if (
             appendBreadcrumb &&
@@ -840,14 +850,15 @@ internal object BreadcrumbTrailEngine {
     private const val MAX_BREADCRUMB_POINTS = 10_000
     private const val MIN_BREADCRUMB_POINT_DISTANCE_METERS = 2.0
     private const val MIN_ROUTE_DISTANCE_BEFORE_RETURN_METERS = 35.0
-    private const val RETURN_DETECTION_ROUTE_DISTANCE_METERS = 18.0
+    private const val RETURN_DETECTION_ROUTE_DISTANCE_METERS = 25.0
     private const val RETURN_DETECTION_DISTANCE_DROP_METERS = 1.0
     private const val RETURNING_ROUTE_SNAP_DISTANCE_METERS = 25.0
+    private const val RETURN_ARRIVAL_DISTANCE_METERS = 8.0
     private const val TURN_BACK_DISTANCE_METERS = 18.0
     private const val BRANCH_OFF_ROUTE_DISTANCE_METERS = 35.0
     private const val GRAPH_METERS_PER_DEGREE = 111_320.0
     private const val GRAPH_CELL_SIZE_METERS = 30.0
-    private const val GRAPH_INTERSECTION_SNAP_METERS = 8.0
+    private const val GRAPH_INTERSECTION_SNAP_METERS = 12.0
     private const val GRAPH_ENDPOINT_TOLERANCE = 0.001
     private const val GRAPH_DUPLICATE_POINT_METERS = 0.5
     private const val GRAPH_LINE_EPSILON = 0.000001

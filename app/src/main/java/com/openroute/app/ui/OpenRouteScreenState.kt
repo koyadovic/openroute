@@ -8,6 +8,7 @@ import com.openroute.app.data.RouteNavigationProgress
 import com.openroute.app.data.RouteSource
 import com.openroute.app.data.RouteTrack
 import com.openroute.app.data.RouteTravelDirection
+import com.openroute.app.data.distanceMeters
 import com.openroute.app.data.effectiveDurationMillis
 import com.openroute.app.location.BreadcrumbState
 import kotlin.math.roundToInt
@@ -598,12 +599,14 @@ private fun RouteTrack.routeWindowAround(
         RouteTravelDirection.Forward -> segmentStartIndex + 1
         RouteTravelDirection.Backward -> segmentStartIndex
     }
-    val distantBehindPoints = collectDirectionalWindow(
-        startIndex = previousIndex - ((NAVIGATION_3D_POINTS_BEHIND + 1) * step),
+    val distantBehindPoints = collectDirectionalDistanceWindow(
+        startIndex = previousIndex - (3 * step),
         step = step,
-        size = NAVIGATION_3D_POINTS_BEHIND,
+        maxDistanceMeters = NAVIGATION_3D_DISTANCE_BEHIND_METERS,
         wrapAround = wrapAround,
-    ).simplifyFor3D()
+    )
+        .asReversed()
+        .simplifyFor3D()
     val coreBehindPoints = collectDirectionalWindow(
         startIndex = previousIndex - step,
         step = step,
@@ -617,9 +620,14 @@ private fun RouteTrack.routeWindowAround(
         wrapAround = wrapAround,
     )
     val distantAheadPoints = collectDirectionalWindow(
+        startIndex = nextIndex,
+        step = step,
+        size = 2,
+        wrapAround = wrapAround,
+    ) + collectDirectionalDistanceWindow(
         startIndex = nextIndex + (2 * step),
         step = step,
-        size = NAVIGATION_3D_POINTS_AHEAD,
+        maxDistanceMeters = NAVIGATION_3D_DISTANCE_AHEAD_METERS,
         wrapAround = wrapAround,
     ).simplifyFor3D()
 
@@ -630,6 +638,39 @@ private fun RouteTrack.routeWindowAround(
             coreAheadPoints +
             distantAheadPoints
         ).removeNearDuplicates()
+}
+
+private fun RouteTrack.collectDirectionalDistanceWindow(
+    startIndex: Int,
+    step: Int,
+    maxDistanceMeters: Double,
+    wrapAround: Boolean,
+): List<com.openroute.app.data.LatLngPoint> {
+    if (points.isEmpty() || maxDistanceMeters <= 0.0) {
+        return emptyList()
+    }
+
+    return buildList {
+        var travelledMeters = 0.0
+        var previousPoint: com.openroute.app.data.LatLngPoint? = null
+        var offset = 0
+        val maxIterations = if (wrapAround) points.size else points.size + 1
+        while (offset < maxIterations && travelledMeters <= maxDistanceMeters) {
+            val rawIndex = startIndex + (offset * step)
+            val index = if (wrapAround) {
+                rawIndex.floorMod(points.size)
+            } else {
+                rawIndex
+            }
+            val point = points.getOrNull(index) ?: break
+            previousPoint?.let { travelledMeters += listOf(it, point).distanceMeters() }
+            if (travelledMeters <= maxDistanceMeters) {
+                add(point)
+            }
+            previousPoint = point
+            offset += 1
+        }
+    }
 }
 
 private fun RouteTrack.collectDirectionalWindow(
@@ -877,8 +918,8 @@ private fun Long.toActiveDurationLabel(): String {
 }
 
 private const val OFF_ROUTE_ALERT_DISTANCE_METERS = 50.0
-private const val NAVIGATION_3D_POINTS_BEHIND = 8
-private const val NAVIGATION_3D_POINTS_AHEAD = 28
+private const val NAVIGATION_3D_DISTANCE_BEHIND_METERS = 50.0
+private const val NAVIGATION_3D_DISTANCE_AHEAD_METERS = 500.0
 private const val CLOSED_LOOP_ROUTE_THRESHOLD_METERS = 35.0
-private const val NAVIGATION_3D_SIMPLIFICATION_TOLERANCE_METERS = 4.0
+private const val NAVIGATION_3D_SIMPLIFICATION_TOLERANCE_METERS = 2.0
 private const val MIN_RENDER_POINT_DISTANCE_METERS = 1.0

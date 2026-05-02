@@ -71,6 +71,7 @@ fun Navigation3DCanvas(
         Animatable(state.headingDegrees.toFloat())
     }
     var isAnimationPrimed by remember { mutableStateOf(false) }
+    var previousTargetLocation by remember { mutableStateOf<LatLngPoint?>(null) }
 
     LaunchedEffect(
         state.currentLocation?.latitude,
@@ -80,6 +81,7 @@ fun Navigation3DCanvas(
         val targetLocation = state.currentLocation
         if (targetLocation == null) {
             isAnimationPrimed = false
+            previousTargetLocation = null
             return@LaunchedEffect
         }
 
@@ -92,8 +94,24 @@ fun Navigation3DCanvas(
             fromDegrees = animatedHeading.value.toDouble(),
             toDegrees = state.headingDegrees,
         )
+        val predictionDistanceMeters = if (isAnimationPrimed && !state.isOffRoute) {
+            predictedDistanceMeters(
+                previousLocation = previousTargetLocation,
+                targetLocation = targetLocation,
+            )
+        } else {
+            0.0
+        }
+        val animationTargetLocation = if (predictionDistanceMeters > 0.0) {
+            targetLocation.projectedForward(
+                headingDegrees = state.headingDegrees,
+                distanceMeters = predictionDistanceMeters,
+            )
+        } else {
+            targetLocation
+        }
         val animationDurationMillis = transitionDurationMillis(
-            distanceMeters = distanceMeters,
+            distanceMeters = currentAnimatedLocation.distanceTo(animationTargetLocation),
             headingDeltaDegrees = headingDelta,
         )
 
@@ -101,14 +119,16 @@ fun Navigation3DCanvas(
             animatedLatitude.snapTo(targetLocation.latitude.toFloat())
             animatedLongitude.snapTo(targetLocation.longitude.toFloat())
             animatedHeading.snapTo(state.headingDegrees.toFloat())
+            previousTargetLocation = targetLocation
             isAnimationPrimed = true
             return@LaunchedEffect
         }
+        previousTargetLocation = targetLocation
 
         coroutineScope {
             launch {
                 animatedLatitude.animateTo(
-                    targetValue = targetLocation.latitude.toFloat(),
+                    targetValue = animationTargetLocation.latitude.toFloat(),
                     animationSpec = tween(
                         durationMillis = animationDurationMillis,
                         easing = LinearEasing,
@@ -117,7 +137,7 @@ fun Navigation3DCanvas(
             }
             launch {
                 animatedLongitude.animateTo(
-                    targetValue = targetLocation.longitude.toFloat(),
+                    targetValue = animationTargetLocation.longitude.toFloat(),
                     animationSpec = tween(
                         durationMillis = animationDurationMillis,
                         easing = LinearEasing,
@@ -420,11 +440,45 @@ private fun transitionDurationMillis(
     distanceMeters: Double,
     headingDeltaDegrees: Double,
 ): Int {
-    val distanceDuration = (220 + (distanceMeters * 10)).roundToInt()
-        .coerceIn(220, 1_400)
+    val distanceDuration = (320 + (distanceMeters * 12)).roundToInt()
+        .coerceIn(320, 1_900)
     val headingDuration = (180 + (headingDeltaDegrees * 4)).roundToInt()
         .coerceIn(180, 900)
     return max(distanceDuration, headingDuration)
+}
+
+private fun predictedDistanceMeters(
+    previousLocation: LatLngPoint?,
+    targetLocation: LatLngPoint,
+): Double {
+    val previous = previousLocation ?: return 0.0
+    val previousTimestamp = previous.timestampMillis ?: return 0.0
+    val targetTimestamp = targetLocation.timestampMillis ?: return 0.0
+    val elapsedSeconds = ((targetTimestamp - previousTimestamp) / 1000.0)
+        .takeIf { seconds -> seconds in 0.4..8.0 }
+        ?: return 0.0
+    val speedMetersPerSecond = previous.distanceTo(targetLocation) / elapsedSeconds
+    return (speedMetersPerSecond * PREDICTION_SECONDS)
+        .coerceIn(0.0, MAX_PREDICTION_DISTANCE_METERS)
+}
+
+private fun LatLngPoint.projectedForward(
+    headingDegrees: Double,
+    distanceMeters: Double,
+): LatLngPoint {
+    if (distanceMeters <= 0.0) {
+        return this
+    }
+
+    val headingRadians = Math.toRadians(headingDegrees)
+    val latitudeDelta = (cos(headingRadians) * distanceMeters) / METERS_PER_DEGREE_LATITUDE
+    val longitudeDelta = (sin(headingRadians) * distanceMeters) /
+        (METERS_PER_DEGREE_LATITUDE * cos(Math.toRadians(latitude)).coerceAtLeast(0.01))
+
+    return copy(
+        latitude = latitude + latitudeDelta,
+        longitude = longitude + longitudeDelta,
+    )
 }
 
 private fun shortestAngleDeltaDegrees(fromDegrees: Double, toDegrees: Double): Double {
@@ -455,10 +509,13 @@ private fun LatLngPoint.distanceTo(other: LatLngPoint): Double {
 }
 
 private const val MAX_ANIMATED_STEP_DISTANCE_METERS = 90.0
+private const val PREDICTION_SECONDS = 1.2
+private const val MAX_PREDICTION_DISTANCE_METERS = 12.0
+private const val METERS_PER_DEGREE_LATITUDE = 111_320.0
 
 private fun projectWorldPoint(worldPoint: WorldPoint, viewport: Size): Offset? {
-    val camera = WorldPoint(0.0, 9.5, -30.0)
-    val target = WorldPoint(0.0, -2.5, 22.0)
+    val camera = WorldPoint(0.0, 12.0, -38.0)
+    val target = WorldPoint(0.0, -3.0, 48.0)
     val forward = normalize(target - camera)
     val worldUp = WorldPoint(0.0, 1.0, 0.0)
     val right = normalize(cross(worldUp, forward))
@@ -472,7 +529,7 @@ private fun projectWorldPoint(worldPoint: WorldPoint, viewport: Size): Offset? {
         return null
     }
 
-    val focal = viewport.height * 1.08
+    val focal = viewport.height * 0.88
     return Offset(
         x = (viewport.width / 2f) + ((cameraX * focal) / cameraZ).toFloat(),
         y = (viewport.height * 0.72f) - ((cameraY * focal) / cameraZ).toFloat(),

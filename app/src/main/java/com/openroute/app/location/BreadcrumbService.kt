@@ -47,6 +47,10 @@ class BreadcrumbService : Service() {
                 point = update.point,
                 appendBreadcrumb = update.source == FusedLocationSource.Gnss,
             )
+            if (!BreadcrumbSessionStore.state.value.isActive) {
+                finalizeAndStop()
+                return@LocationFusionRuntime
+            }
 
             if (update.source == FusedLocationSource.Gnss || update.shouldAppendVisitedPoint) {
                 updateNotificationForState()

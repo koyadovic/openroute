@@ -86,6 +86,33 @@ class BreadcrumbTrailEngineTest {
         assertTrue((state.progress?.remainingDistanceMeters ?: 0.0) in 45.0..65.0)
     }
 
+    @Test
+    fun `stops breadcrumbs when returning reaches the start`() {
+        var state = BreadcrumbTrailEngine.start(startedAtMillis = 1_000L)
+        listOf(0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0).forEach { meters ->
+            state = BreadcrumbTrailEngine.update(
+                state = state,
+                point = pointNorth(meters),
+                appendBreadcrumb = true,
+            )
+        }
+        state = BreadcrumbTrailEngine.update(
+            state = state,
+            point = pointNorth(40.0),
+            appendBreadcrumb = true,
+        )
+
+        state = BreadcrumbTrailEngine.update(
+            state = state,
+            point = pointNorth(3.0),
+            appendBreadcrumb = true,
+        )
+
+        assertTrue(!state.isActive)
+        assertTrue(!state.isReturning)
+        assertTrue(state.points.isEmpty())
+    }
+
 }
 
 private fun pointNorth(
