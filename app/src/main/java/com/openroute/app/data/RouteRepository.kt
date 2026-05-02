@@ -3,24 +3,27 @@ package com.openroute.app.data
 import android.content.Context
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class RouteRepository(context: Context) {
-    private val storageFile = File(context.filesDir, STORAGE_FILE_NAME)
+    private val routeDao = OpenRouteDatabase.get(context).routeDao()
+    private val legacyStorageFile = File(context.filesDir, LEGACY_STORAGE_FILE_NAME)
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
     }
-
     suspend fun loadRoutes(): List<RouteTrack> = withContext(Dispatchers.IO) {
-        readRoutesInternal()
+        ensureLegacyMigration()
+        routeDao.getAllRoutes().map { entity -> entity.toRouteTrack() }
     }
 
     suspend fun addRoute(route: RouteTrack): RouteTrack = withContext(Dispatchers.IO) {
-        val routes = readRoutesInternal().filterNot { it.id == route.id }
-        writeRoutesInternal(listOf(route) + routes)
+        ensureLegacyMigration()
+        routeDao.upsertRoute(route.toEntity())
         route
     }
 
@@ -29,91 +32,116 @@ class RouteRepository(context: Context) {
             return@withContext emptyList()
         }
 
-        val currentRoutes = readRoutesInternal()
-        val incomingIds = routesToAdd.map(RouteTrack::id).toSet()
-        val updatedRoutes = routesToAdd + currentRoutes.filterNot { it.id in incomingIds }
-
-        writeRoutesInternal(updatedRoutes)
+        ensureLegacyMigration()
+        routeDao.upsertRoutes(routesToAdd.map { route -> route.toEntity() })
         routesToAdd.sortedByDescending(RouteTrack::createdAtMillis)
     }
 
     suspend fun hideRoute(routeId: String): RouteTrack? = withContext(Dispatchers.IO) {
-        val currentRoutes = readRoutesInternal()
-        val routeToHide = currentRoutes.firstOrNull { it.id == routeId } ?: return@withContext null
-        val updatedRoutes = currentRoutes.map { route ->
-            if (route.id == routeId) {
-                route.copy(isHidden = true)
-            } else {
-                route
-            }
-        }
-
-        writeRoutesInternal(updatedRoutes)
+        ensureLegacyMigration()
+        val routeToHide = routeDao.getRoute(routeId)?.toRouteTrack() ?: return@withContext null
+        routeDao.hideRoute(routeId)
         routeToHide.copy(isHidden = true)
     }
 
     suspend fun markRouteAsSeen(routeId: String): RouteTrack? = withContext(Dispatchers.IO) {
-        val currentRoutes = readRoutesInternal()
-        val routeToUpdate = currentRoutes.firstOrNull { it.id == routeId } ?: return@withContext null
+        ensureLegacyMigration()
+        val routeToUpdate = routeDao.getRoute(routeId)?.toRouteTrack() ?: return@withContext null
         if (!routeToUpdate.isNew) {
             return@withContext routeToUpdate
         }
 
-        val updatedRoutes = currentRoutes.map { route ->
-            if (route.id == routeId) {
-                route.copy(isNew = false)
-            } else {
-                route
-            }
-        }
-
-        writeRoutesInternal(updatedRoutes)
+        routeDao.markRouteAsSeen(routeId)
         routeToUpdate.copy(isNew = false)
     }
 
     suspend fun renameRoute(routeId: String, name: String): RouteTrack? = withContext(Dispatchers.IO) {
+        ensureLegacyMigration()
         val normalizedName = name.trim()
         if (normalizedName.isEmpty()) {
             return@withContext null
         }
 
-        val currentRoutes = readRoutesInternal()
-        val routeToUpdate = currentRoutes.firstOrNull { it.id == routeId } ?: return@withContext null
+        val routeToUpdate = routeDao.getRoute(routeId)?.toRouteTrack() ?: return@withContext null
         val updatedRoute = routeToUpdate.copy(name = normalizedName)
-        val updatedRoutes = currentRoutes.map { route ->
-            if (route.id == routeId) {
-                updatedRoute
-            } else {
-                route
-            }
-        }
-
-        writeRoutesInternal(updatedRoutes)
+        routeDao.renameRoute(routeId, normalizedName)
         updatedRoute
     }
 
     suspend fun deleteRoute(routeId: String): RouteTrack? = withContext(Dispatchers.IO) {
-        val currentRoutes = readRoutesInternal()
-        val routeToDelete = currentRoutes.firstOrNull { it.id == routeId } ?: return@withContext null
-        val updatedRoutes = currentRoutes.filterNot { it.id == routeId }
-        writeRoutesInternal(updatedRoutes)
+        ensureLegacyMigration()
+        val routeToDelete = routeDao.getRoute(routeId)?.toRouteTrack() ?: return@withContext null
+        routeDao.deleteRoute(routeId)
         routeToDelete
     }
 
-    private fun readRoutesInternal(): List<RouteTrack> {
-        if (!storageFile.exists()) {
-            return emptyList()
+    private suspend fun ensureLegacyMigration() {
+        if (hasCheckedLegacyMigration) {
+            return
         }
 
-        val stored = json.decodeFromString<StoredRoutes>(storageFile.readText())
-        return stored.routes.sortedByDescending(RouteTrack::createdAtMillis)
+        legacyMigrationMutex.withLock {
+            if (hasCheckedLegacyMigration) {
+                return
+            }
+
+            migrateLegacyJsonIfNeeded()
+            hasCheckedLegacyMigration = true
+        }
     }
 
-    private fun writeRoutesInternal(routes: List<RouteTrack>) {
-        storageFile.writeText(json.encodeToString(StoredRoutes(routes)))
+    private suspend fun migrateLegacyJsonIfNeeded() {
+        if (!legacyStorageFile.exists()) {
+            return
+        }
+
+        val stored = json.decodeFromString<StoredRoutes>(legacyStorageFile.readText())
+        if (stored.routes.isNotEmpty()) {
+            routeDao.upsertRoutes(stored.routes.map { route -> route.toEntity() })
+        }
+
+        if (!legacyStorageFile.delete() && legacyStorageFile.exists()) {
+            error("Migración completada, pero no se pudo eliminar ${legacyStorageFile.name}.")
+        }
+    }
+
+    private fun RouteTrack.toEntity(): RouteEntity {
+        return RouteEntity(
+            id = id,
+            name = name,
+            source = source.name,
+            createdAtMillis = createdAtMillis,
+            distanceMeters = distanceMeters,
+            durationMillis = durationMillis,
+            pointsJson = json.encodeToString(points),
+            isNew = isNew,
+            isHidden = isHidden,
+            importReference = importReference,
+            originalFileName = originalFileName,
+        )
+    }
+
+    private fun RouteEntity.toRouteTrack(): RouteTrack {
+        return RouteTrack(
+            id = id,
+            name = name,
+            source = RouteSource.valueOf(source),
+            createdAtMillis = createdAtMillis,
+            distanceMeters = distanceMeters,
+            durationMillis = durationMillis,
+            points = json.decodeFromString(pointsJson),
+            isNew = isNew,
+            isHidden = isHidden,
+            importReference = importReference,
+            originalFileName = originalFileName,
+        )
     }
 
     private companion object {
-        private const val STORAGE_FILE_NAME = "routes.json"
+        private const val LEGACY_STORAGE_FILE_NAME = "routes.json"
+        private val legacyMigrationMutex = Mutex()
+
+        @Volatile
+        private var hasCheckedLegacyMigration = false
     }
 }
