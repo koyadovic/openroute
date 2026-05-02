@@ -23,6 +23,7 @@ import com.openroute.app.location.TrackingService
 import com.openroute.app.location.TrackingSessionStore
 import com.openroute.app.location.TrackingState
 import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -35,6 +36,8 @@ internal data class OpenRouteUiState(
     val isImporting: Boolean = false,
     val isSyncingDownloads: Boolean = false,
     val isTracking: Boolean = false,
+    val trackingStartedAtMillis: Long? = null,
+    val clockNowMillis: Long = System.currentTimeMillis(),
     val routes: List<RouteTrack> = emptyList(),
     val selectedRouteId: String? = null,
     val detailRouteId: String? = null,
@@ -95,6 +98,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { current ->
                     current.copy(
                         isTracking = trackingState.isRecording,
+                        trackingStartedAtMillis = trackingState.startedAtMillis,
+                        clockNowMillis = System.currentTimeMillis(),
                         liveTrack = current.resolveLiveTrack(trackingState = trackingState),
                         currentLocation = current.navigationState.currentLocation
                             ?: current.breadcrumbState.currentLocation
@@ -130,6 +135,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update { current ->
                     current.copy(
                         breadcrumbState = breadcrumbState,
+                        clockNowMillis = System.currentTimeMillis(),
                         liveTrack = current.copy(breadcrumbState = breadcrumbState)
                             .resolveLiveTrack(trackingState = TrackingSessionStore.state.value),
                         currentLocation = current.navigationState.currentLocation
@@ -152,6 +158,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         selectedRouteId = route.id,
                         message = "Ruta guardada: ${route.name}",
                     )
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            while (true) {
+                delay(ACTIVE_DURATION_TICK_MILLIS)
+                _uiState.update { current ->
+                    if (current.isTracking || current.breadcrumbState.isActive) {
+                        current.copy(clockNowMillis = System.currentTimeMillis())
+                    } else {
+                        current
+                    }
                 }
             }
         }
@@ -539,3 +558,5 @@ private fun com.openroute.app.data.DownloadsImportResult.toMessage(): String? {
         else -> null
     }
 }
+
+private const val ACTIVE_DURATION_TICK_MILLIS = 1_000L

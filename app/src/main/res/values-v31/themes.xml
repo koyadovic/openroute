@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.OpenRoute" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowSplashScreenBackground">#F8FAF3</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_openroute_launcher</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#F8FAF3</item>
+    </style>
+</resources>

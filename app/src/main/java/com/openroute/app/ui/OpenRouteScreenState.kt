@@ -47,6 +47,8 @@ data class SummaryState(
     val liveTrackValue: String = "off",
     val selectedLabel: String = "Selected",
     val selectedValue: String = "-",
+    val activeDurationLabel: String? = null,
+    val activeDurationValue: String? = null,
 )
 
 enum class RouteBadge(val label: String) {
@@ -142,6 +144,8 @@ data class Navigation3DState(
     val showsOffRouteAlert: Boolean = false,
     val renderState: Navigation3DRenderState = Navigation3DRenderState(),
     val isBreadcrumb: Boolean = false,
+    val activeDurationLabel: String? = null,
+    val activeDurationValue: String? = null,
 )
 
 data class OpenRouteScreenState(
@@ -216,7 +220,12 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             progress = navigationProgress,
             currentLocation = navigationState.currentLocation,
         )
-    val navigation3DState = breadcrumbState.toNavigation3DState() ?: routeNavigation3DState
+    val activeDurationValue = activeDurationMillis()?.toActiveDurationLabel()
+    val activeDurationLabel = activeDurationLabel().takeIf { activeDurationValue != null }
+    val navigation3DState = breadcrumbState.toNavigation3DState(
+        activeDurationLabel = activeDurationLabel.takeIf { breadcrumbState.isActive },
+        activeDurationValue = activeDurationValue.takeIf { breadcrumbState.isActive },
+    ) ?: routeNavigation3DState
 
     return OpenRouteScreenState(
         mode = when {
@@ -256,7 +265,7 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
                 MapRouteOverlay(
                     id = route.id,
                     name = route.name,
-                    color = if (route.id == selectedRouteId) "#0B6E4F" else route.source.defaultColor,
+                    color = if (route.id == selectedRouteId) "#073B67" else route.source.defaultColor,
                     selected = route.id == selectedRouteId,
                     points = route.points,
                 )
@@ -273,6 +282,8 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
                 "off"
             },
             selectedValue = selectedRoute?.distanceMeters.toDistanceLabel(),
+            activeDurationLabel = activeDurationLabel,
+            activeDurationValue = activeDurationValue,
         ),
         browseAction = BrowseActionState(
             canHideSelected = selectedRoute != null,
@@ -447,7 +458,10 @@ private fun RouteTrack.toNavigation3DState(
     )
 }
 
-private fun BreadcrumbState.toNavigation3DState(): Navigation3DState? {
+private fun BreadcrumbState.toNavigation3DState(
+    activeDurationLabel: String?,
+    activeDurationValue: String?,
+): Navigation3DState? {
     if (!isReturning) {
         return null
     }
@@ -469,7 +483,27 @@ private fun BreadcrumbState.toNavigation3DState(): Navigation3DState? {
             else -> "Volviendo por tus migas"
         },
         isBreadcrumb = true,
+        activeDurationLabel = activeDurationLabel,
+        activeDurationValue = activeDurationValue,
     )
+}
+
+private fun OpenRouteUiState.activeDurationLabel(): String? {
+    return when {
+        isTracking -> "Tiempo grabando"
+        breadcrumbState.isActive -> "Tiempo migas"
+        else -> null
+    }
+}
+
+private fun OpenRouteUiState.activeDurationMillis(): Long? {
+    val startedAtMillis = when {
+        isTracking -> trackingStartedAtMillis
+        breadcrumbState.isActive -> breadcrumbState.startedAtMillis.takeIf { it > 0L }
+        else -> null
+    } ?: return null
+
+    return (clockNowMillis - startedAtMillis).coerceAtLeast(0L)
 }
 
 private fun com.openroute.app.location.NavigationState.progressFor(routeId: String): RouteNavigationProgress? {
@@ -482,8 +516,8 @@ private fun com.openroute.app.location.NavigationState.isActiveFor(routeId: Stri
 
 private val RouteSource.defaultColor: String
     get() = when (this) {
-        RouteSource.IMPORTED_GPX -> "#1D3557"
-        RouteSource.RECORDED -> "#D95D39"
+        RouteSource.IMPORTED_GPX -> "#073B67"
+        RouteSource.RECORDED -> "#697380"
     }
 
 private fun RouteTrack.metricsSubtitle(): String {
@@ -778,6 +812,19 @@ private fun Long?.toEtaLabel(): String {
         "${hours}h ${minutes}m"
     } else {
         "${minutes} min"
+    }
+}
+
+private fun Long.toActiveDurationLabel(): String {
+    val totalSeconds = (this / 1000).coerceAtLeast(0L)
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+
+    return when {
+        hours > 0 -> "${hours}h ${minutes.toString().padStart(2, '0')}m"
+        minutes > 0 -> "${minutes}m ${seconds.toString().padStart(2, '0')}s"
+        else -> "${seconds}s"
     }
 }
 

@@ -478,11 +478,19 @@ fun OpenRouteScreen(
                             modifier = Modifier.size(42.dp),
                         )
                         Column {
-                            Text(
-                                text = state.header.title,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
+                            if (state.header.title == "OpenRoute") {
+                                OpenRouteWordmark(
+                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                            } else {
+                                Text(
+                                    text = state.header.title,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
                             Text(
                                 text = state.header.subtitle,
                                 style = MaterialTheme.typography.bodySmall,
@@ -891,6 +899,13 @@ private fun Navigation3DScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+                if (state.activeDurationLabel != null && state.activeDurationValue != null) {
+                    SummaryChip(
+                        label = state.activeDurationLabel,
+                        value = state.activeDurationValue,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
@@ -981,25 +996,37 @@ private fun DownloadsBanner(
 
 @Composable
 private fun RouteSummary(state: SummaryState) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SummaryChip(
-            label = state.routesLabel,
-            value = state.routesValue,
-            modifier = Modifier.weight(1f),
-        )
-        SummaryChip(
-            label = state.liveTrackLabel,
-            value = state.liveTrackValue,
-            modifier = Modifier.weight(1f),
-        )
-        SummaryChip(
-            label = state.selectedLabel,
-            value = state.selectedValue,
-            modifier = Modifier.weight(1f),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SummaryChip(
+                label = state.routesLabel,
+                value = state.routesValue,
+                modifier = Modifier.weight(1f),
+            )
+            SummaryChip(
+                label = state.liveTrackLabel,
+                value = state.liveTrackValue,
+                modifier = Modifier.weight(1f),
+            )
+            SummaryChip(
+                label = state.selectedLabel,
+                value = state.selectedValue,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (state.activeDurationLabel != null && state.activeDurationValue != null) {
+            SummaryChip(
+                label = state.activeDurationLabel,
+                value = state.activeDurationValue,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 

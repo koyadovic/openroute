@@ -68,8 +68,23 @@ class OpenRouteScreenStateTest {
         assertEquals("Mostrar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
         assertTrue(screenState.routeList.hiddenRoutes?.items?.isEmpty() == true)
         assertEquals(1, screenState.mapState.liveTrack.size)
-        assertEquals("#0B6E4F", screenState.mapState.routes.single().color)
+        assertEquals("#073B67", screenState.mapState.routes.single().color)
         assertNull(screenState.detailState)
+    }
+
+    @Test
+    fun `shows active recording duration in summary`() {
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            isTracking = true,
+            trackingStartedAtMillis = 1_000L,
+            clockNowMillis = 126_000L,
+            liveTrack = listOf(LatLngPoint(40.41, -3.71)),
+            currentLocation = LatLngPoint(40.41, -3.71),
+        ).toScreenState()
+
+        assertEquals("Tiempo grabando", screenState.summary.activeDurationLabel)
+        assertEquals("2m 05s", screenState.summary.activeDurationValue)
     }
 
     @Test
@@ -435,6 +450,7 @@ class OpenRouteScreenStateTest {
 
         val screenState = OpenRouteUiState(
             isLoading = false,
+            clockNowMillis = 1_700_000_090_000,
             breadcrumbState = BreadcrumbState(
                 isActive = true,
                 mode = BreadcrumbMode.Returning,
@@ -466,6 +482,8 @@ class OpenRouteScreenStateTest {
         assertEquals("Volviendo por tus migas", screenState.navigation3DState?.statusLabel)
         assertEquals("25%", screenState.navigation3DState?.progressLabel)
         assertEquals(3, screenState.mapState.liveTrack.size)
+        assertEquals("Tiempo migas", screenState.navigation3DState?.activeDurationLabel)
+        assertEquals("1m 30s", screenState.navigation3DState?.activeDurationValue)
     }
 
     @Test
