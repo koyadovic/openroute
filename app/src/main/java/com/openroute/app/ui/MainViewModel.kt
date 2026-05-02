@@ -39,6 +39,7 @@ internal data class OpenRouteUiState(
     val trackingStartedAtMillis: Long? = null,
     val clockNowMillis: Long = System.currentTimeMillis(),
     val routes: List<RouteTrack> = emptyList(),
+    val mainSection: OpenRouteMainSection = OpenRouteMainSection.Routes,
     val selectedRouteId: String? = null,
     val detailRouteId: String? = null,
     val navigation3DRouteId: String? = null,
@@ -66,7 +67,7 @@ internal data class OpenRouteUiState(
         get() = visibleRoutes.firstOrNull { it.id == selectedRouteId } ?: visibleRoutes.firstOrNull()
 
     val detailRoute: RouteTrack?
-        get() = visibleRoutes.firstOrNull { it.id == detailRouteId }
+        get() = routes.firstOrNull { it.id == detailRouteId }
 
     val navigation3DRoute: RouteTrack?
         get() = visibleRoutes.firstOrNull { it.id == navigation3DRouteId }
@@ -185,7 +186,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     routes = routes,
                     selectedRouteId = current.resolveNextSelectedRouteId(routes),
                     detailRouteId = current.detailRouteId
-                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId && !route.isHidden } },
+                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId } },
                     navigation3DRouteId = current.navigation3DRouteId
                         ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
                 )
@@ -231,12 +232,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun selectRoute(routeId: String) {
-        _uiState.update { it.copy(selectedRouteId = routeId) }
+    fun openMainSection(section: OpenRouteMainSection) {
+        _uiState.update { current ->
+            current.copy(
+                mainSection = section,
+                selectedRouteId = if (section == OpenRouteMainSection.Routes) {
+                    current.resolveNextSelectedRouteId(current.routes)
+                } else {
+                    current.selectedRouteId
+                },
+                detailRouteId = null,
+                navigation3DRouteId = null,
+                showsHiddenRoutes = false,
+                deleteRouteId = null,
+                renameRouteId = null,
+                renameDraft = "",
+            )
+        }
     }
 
-    fun openSelectedRouteDetail() {
-        val route = _uiState.value.selectedRoute ?: return
+    fun openRouteDetail(routeId: String) {
+        val route = _uiState.value.routes.firstOrNull { it.id == routeId } ?: return
         val shouldClearNewBadge = route.source == RouteSource.IMPORTED_GPX && route.isNew
 
         _uiState.update { current ->
@@ -252,6 +268,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     current.routes
                 },
+                selectedRouteId = if (route.isHidden) current.selectedRouteId else route.id,
                 detailRouteId = route.id,
             )
         }
@@ -294,7 +311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     routes = routes,
                     selectedRouteId = current.resolveSelectionAfterImports(routes, importResult.importedRoutes),
                     detailRouteId = current.detailRouteId
-                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId && !route.isHidden } },
+                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId } },
                     navigation3DRouteId = current.navigation3DRouteId
                         ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
                     message = importResult.toMessage(),
@@ -319,9 +336,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun hideSelectedRoute() {
-        val routeId = _uiState.value.selectedRouteId ?: return
+    fun hideDetailRoute() {
+        val routeId = _uiState.value.detailRouteId ?: return
+        hideRoute(routeId)
+    }
 
+    private fun hideRoute(routeId: String) {
         viewModelScope.launch {
             val hiddenRoute = repository.hideRoute(routeId) ?: return@launch
             val routes = repository.loadRoutes()
@@ -353,10 +373,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun requestDeleteRoute(routeId: String) {
-        val route = _uiState.value.hiddenRoutes.firstOrNull { it.id == routeId } ?: return
+        val route = _uiState.value.routes.firstOrNull { it.id == routeId } ?: return
         _uiState.update { current ->
             current.copy(deleteRouteId = route.id)
         }
+    }
+
+    fun requestDeleteDetailRoute() {
+        val routeId = _uiState.value.detailRouteId ?: return
+        requestDeleteRoute(routeId)
     }
 
     fun dismissDeleteRoute() {
@@ -375,7 +400,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     routes = routes,
                     selectedRouteId = current.resolveNextSelectedRouteId(routes),
                     detailRouteId = current.detailRouteId
-                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId && !route.isHidden } },
+                        ?.takeIf { detailId -> routes.any { route -> route.id == detailId } },
                     navigation3DRouteId = current.navigation3DRouteId
                         ?.takeIf { sceneId -> routes.any { route -> route.id == sceneId && !route.isHidden } },
                     showsHiddenRoutes = current.showsHiddenRoutes && routes.any(RouteTrack::isHidden),
@@ -429,6 +454,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.breadcrumbState.isActive) {
             BreadcrumbService.stop(context)
         }
+        _uiState.update { it.copy(mainSection = OpenRouteMainSection.Recording) }
         TrackingService.start(context)
     }
 
@@ -444,7 +470,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             NavigationService.stop(context)
         }
         _uiState.update { current ->
-            current.copy(navigation3DRouteId = null)
+            current.copy(
+                mainSection = OpenRouteMainSection.Breadcrumbs,
+                navigation3DRouteId = null,
+            )
         }
         BreadcrumbService.start(context)
     }

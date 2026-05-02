@@ -39,9 +39,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -51,12 +55,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -73,6 +79,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.openroute.app.R
+import kotlinx.coroutines.launch
 
 @Composable
 fun MainRoute(viewModel: MainViewModel) {
@@ -80,6 +87,7 @@ fun MainRoute(viewModel: MainViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val appVersionLabel = remember(context) { context.resolveAppVersionLabel() }
     var downloadsAccessState by remember { mutableStateOf(context.resolveDownloadsAccessState()) }
     var trackingSetupDialogState by remember { mutableStateOf<TrackingSetupDialogState?>(null) }
 
@@ -281,7 +289,10 @@ fun MainRoute(viewModel: MainViewModel) {
         }
     }
 
-    BackHandler(enabled = screenState.mode != OpenRouteScreenMode.Browse) {
+    BackHandler(
+        enabled = screenState.mode == OpenRouteScreenMode.Detail ||
+            screenState.mode == OpenRouteScreenMode.Navigation3D,
+    ) {
         when (screenState.mode) {
             OpenRouteScreenMode.Detail -> viewModel.closeRouteDetail()
             OpenRouteScreenMode.Navigation3D -> if (screenState.navigation3DState?.isBreadcrumb == true) {
@@ -290,12 +301,15 @@ fun MainRoute(viewModel: MainViewModel) {
                 viewModel.closeNavigation3D()
             }
 
-            OpenRouteScreenMode.Browse -> Unit
+            OpenRouteScreenMode.Routes,
+            OpenRouteScreenMode.Recording,
+            OpenRouteScreenMode.Breadcrumbs -> Unit
         }
     }
 
     OpenRouteScreen(
         state = screenState,
+        appVersionLabel = appVersionLabel,
         downloadsBannerState = downloadsBannerState,
         snackbarHostState = snackbarHostState,
         onImportClick = { importLauncher.launch(arrayOf("*/*")) },
@@ -339,6 +353,7 @@ fun MainRoute(viewModel: MainViewModel) {
                 )
             }
         },
+        onSectionClick = viewModel::openMainSection,
         onEnableDownloadsAutoImport = {
             when (downloadsAccessState) {
                 DownloadsAccessState.Granted -> viewModel.syncDownloadedGpxFiles()
@@ -349,12 +364,11 @@ fun MainRoute(viewModel: MainViewModel) {
                     context.openManageAllFilesAccessSettings()
             }
         },
-        onHideSelectedClick = viewModel::hideSelectedRoute,
+        onHideRouteClick = viewModel::hideDetailRoute,
+        onDeleteRouteClick = viewModel::requestDeleteDetailRoute,
         onToggleHiddenRoutesClick = viewModel::toggleHiddenRoutesVisibility,
-        onDeleteHiddenRouteClick = viewModel::requestDeleteRoute,
         onConfirmDeleteHiddenRouteClick = viewModel::confirmDeleteRoute,
         onDismissDeleteHiddenRouteClick = viewModel::dismissDeleteRoute,
-        onOpenDetailClick = viewModel::openSelectedRouteDetail,
         onCloseDetailClick = viewModel::closeRouteDetail,
         onOpenRenameRouteClick = viewModel::openRenameRoute,
         onRenameDraftChange = viewModel::updateRenameDraft,
@@ -395,7 +409,7 @@ fun MainRoute(viewModel: MainViewModel) {
                 viewModel.closeNavigation3D()
             }
         },
-        onRouteClick = viewModel::selectRoute,
+        onRouteClick = viewModel::openRouteDetail,
     )
 
     trackingSetupDialogState?.let { dialogState ->
@@ -437,18 +451,19 @@ fun MainRoute(viewModel: MainViewModel) {
 @Composable
 fun OpenRouteScreen(
     state: OpenRouteScreenState,
+    appVersionLabel: String,
     downloadsBannerState: DownloadsBannerState?,
     snackbarHostState: SnackbarHostState,
     onImportClick: () -> Unit,
     onTrackClick: () -> Unit,
     onBreadcrumbClick: () -> Unit,
+    onSectionClick: (OpenRouteMainSection) -> Unit,
     onEnableDownloadsAutoImport: () -> Unit,
-    onHideSelectedClick: () -> Unit,
+    onHideRouteClick: () -> Unit,
+    onDeleteRouteClick: () -> Unit,
     onToggleHiddenRoutesClick: () -> Unit,
-    onDeleteHiddenRouteClick: (String) -> Unit,
     onConfirmDeleteHiddenRouteClick: () -> Unit,
     onDismissDeleteHiddenRouteClick: () -> Unit,
-    onOpenDetailClick: () -> Unit,
     onCloseDetailClick: () -> Unit,
     onOpenRenameRouteClick: () -> Unit,
     onRenameDraftChange: (String) -> Unit,
@@ -459,115 +474,221 @@ fun OpenRouteScreen(
     onCloseNavigation3DClick: () -> Unit,
     onRouteClick: (String) -> Unit,
 ) {
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                ),
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_openroute_launcher),
-                            contentDescription = null,
-                            modifier = Modifier.size(42.dp),
-                        )
-                        Column {
-                            if (state.header.title == "OpenRoute") {
-                                OpenRouteWordmark(
-                                    style = MaterialTheme.typography.headlineSmall.copy(
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                )
-                            } else {
-                                Text(
-                                    text = state.header.title,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                            Text(
-                                text = state.header.subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+    val showsDrawer = state.mode.isPrimaryMode()
+
+    BackHandler(enabled = drawerState.isOpen) {
+        coroutineScope.launch { drawerState.close() }
+    }
+
+    LaunchedEffect(showsDrawer) {
+        if (!showsDrawer) {
+            drawerState.close()
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = showsDrawer,
+        drawerContent = {
+            OpenRouteDrawer(
+                items = state.drawerItems,
+                appVersionLabel = appVersionLabel,
+                onSectionClick = { section ->
+                    coroutineScope.launch { drawerState.close() }
+                    onSectionClick(section)
                 },
             )
         },
-    ) { paddingValues ->
-        when (state.mode) {
-            OpenRouteScreenMode.Browse -> BrowseScreen(
-                state = state,
-                downloadsBannerState = downloadsBannerState,
-                onImportClick = onImportClick,
-                onTrackClick = onTrackClick,
-                onBreadcrumbClick = onBreadcrumbClick,
-                onEnableDownloadsAutoImport = onEnableDownloadsAutoImport,
-                onHideSelectedClick = onHideSelectedClick,
-                onToggleHiddenRoutesClick = onToggleHiddenRoutesClick,
-                onDeleteHiddenRouteClick = onDeleteHiddenRouteClick,
-                onConfirmDeleteHiddenRouteClick = onConfirmDeleteHiddenRouteClick,
-                onDismissDeleteHiddenRouteClick = onDismissDeleteHiddenRouteClick,
-                onOpenDetailClick = onOpenDetailClick,
-                onRouteClick = onRouteClick,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+    ) {
+        Scaffold(
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            topBar = {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                    navigationIcon = {
+                        if (showsDrawer) {
+                            TextButton(
+                                onClick = {
+                                    coroutineScope.launch { drawerState.open() }
+                                },
+                            ) {
+                                Text("Menú")
+                            }
+                        }
+                    },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_openroute_launcher),
+                                contentDescription = null,
+                                modifier = Modifier.size(42.dp),
+                            )
+                            Column {
+                                if (state.header.title == "OpenRoute") {
+                                    OpenRouteWordmark(
+                                        style = MaterialTheme.typography.headlineSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                        ),
+                                    )
+                                } else {
+                                    Text(
+                                        text = state.header.title,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                Text(
+                                    text = state.header.subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+        ) { paddingValues ->
+            val contentModifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
 
-            OpenRouteScreenMode.Detail -> RouteDetailScreen(
-                state = state.detailState,
-                mapState = state.mapState,
-                onCloseDetailClick = onCloseDetailClick,
-                onOpenRenameRouteClick = onOpenRenameRouteClick,
-                onRenameDraftChange = onRenameDraftChange,
-                onConfirmRenameRouteClick = onConfirmRenameRouteClick,
-                onDismissRenameRouteClick = onDismissRenameRouteClick,
-                onNavigationClick = onNavigationClick,
-                onStopNavigationClick = onStopNavigationClick,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+            when (state.mode) {
+                OpenRouteScreenMode.Routes -> RoutesScreen(
+                    state = state,
+                    downloadsBannerState = downloadsBannerState,
+                    onImportClick = onImportClick,
+                    onEnableDownloadsAutoImport = onEnableDownloadsAutoImport,
+                    onToggleHiddenRoutesClick = onToggleHiddenRoutesClick,
+                    onRouteClick = onRouteClick,
+                    modifier = contentModifier,
+                )
 
-            OpenRouteScreenMode.Navigation3D -> Navigation3DScreen(
-                state = state.navigation3DState,
-                onCloseClick = onCloseNavigation3DClick,
-                onStopNavigationClick = onStopNavigationClick,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+                OpenRouteScreenMode.Recording -> RecordingScreen(
+                    state = state,
+                    onTrackClick = onTrackClick,
+                    modifier = contentModifier,
+                )
+
+                OpenRouteScreenMode.Breadcrumbs -> BreadcrumbsScreen(
+                    state = state,
+                    onBreadcrumbClick = onBreadcrumbClick,
+                    modifier = contentModifier,
+                )
+
+                OpenRouteScreenMode.Detail -> RouteDetailScreen(
+                    state = state.detailState,
+                    mapState = state.mapState,
+                    onCloseDetailClick = onCloseDetailClick,
+                    onOpenRenameRouteClick = onOpenRenameRouteClick,
+                    onRenameDraftChange = onRenameDraftChange,
+                    onConfirmRenameRouteClick = onConfirmRenameRouteClick,
+                    onDismissRenameRouteClick = onDismissRenameRouteClick,
+                    onHideRouteClick = onHideRouteClick,
+                    onDeleteRouteClick = onDeleteRouteClick,
+                    onConfirmDeleteRouteClick = onConfirmDeleteHiddenRouteClick,
+                    onDismissDeleteRouteClick = onDismissDeleteHiddenRouteClick,
+                    onNavigationClick = onNavigationClick,
+                    onStopNavigationClick = onStopNavigationClick,
+                    modifier = contentModifier,
+                )
+
+                OpenRouteScreenMode.Navigation3D -> Navigation3DScreen(
+                    state = state.navigation3DState,
+                    onCloseClick = onCloseNavigation3DClick,
+                    onStopNavigationClick = onStopNavigationClick,
+                    modifier = contentModifier,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun BrowseScreen(
+private fun OpenRouteDrawer(
+    items: List<DrawerItemState>,
+    appVersionLabel: String,
+    onSectionClick: (OpenRouteMainSection) -> Unit,
+) {
+    ModalDrawerSheet {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_openroute_launcher),
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+            )
+            Column {
+                OpenRouteWordmark(
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                )
+                Text(
+                    text = "Navegación local",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        items.forEach { item ->
+            NavigationDrawerItem(
+                label = {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = item.subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                selected = item.isSelected,
+                onClick = { onSectionClick(item.section) },
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Text(
+            text = appVersionLabel,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+private fun OpenRouteScreenMode.isPrimaryMode(): Boolean {
+    return this == OpenRouteScreenMode.Routes ||
+        this == OpenRouteScreenMode.Recording ||
+        this == OpenRouteScreenMode.Breadcrumbs
+}
+
+@Composable
+private fun RoutesScreen(
     state: OpenRouteScreenState,
     downloadsBannerState: DownloadsBannerState?,
     onImportClick: () -> Unit,
-    onTrackClick: () -> Unit,
-    onBreadcrumbClick: () -> Unit,
     onEnableDownloadsAutoImport: () -> Unit,
-    onHideSelectedClick: () -> Unit,
     onToggleHiddenRoutesClick: () -> Unit,
-    onDeleteHiddenRouteClick: (String) -> Unit,
-    onConfirmDeleteHiddenRouteClick: () -> Unit,
-    onDismissDeleteHiddenRouteClick: () -> Unit,
-    onOpenDetailClick: () -> Unit,
     onRouteClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -575,12 +696,20 @@ private fun BrowseScreen(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ActionBar(
-            state = state.actionBar,
-            onImportClick = onImportClick,
-            onTrackClick = onTrackClick,
-            onBreadcrumbClick = onBreadcrumbClick,
-        )
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onImportClick,
+            enabled = state.actionBar.isImportEnabled,
+        ) {
+            if (state.actionBar.showsImportProgress) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(state.actionBar.importLabel)
+            }
+        }
 
         downloadsBannerState?.let { bannerState ->
             DownloadsBanner(
@@ -589,38 +718,12 @@ private fun BrowseScreen(
             )
         }
 
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            shape = RoundedCornerShape(28.dp),
-        ) {
-            if (state.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                MapWebView(
-                    state = state.mapState,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-        }
-
         RouteSummary(state = state.summary)
-        BrowseActions(
-            state = state.browseAction,
-            onHideSelectedClick = onHideSelectedClick,
-            onOpenDetailClick = onOpenDetailClick,
-        )
 
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.9f),
+                .weight(1f),
             shape = RoundedCornerShape(24.dp),
         ) {
             LazyColumn(
@@ -662,7 +765,7 @@ private fun BrowseScreen(
                         items(hiddenState.items, key = { it.id }) { item ->
                             HiddenRouteRow(
                                 state = item,
-                                onDeleteClick = { onDeleteHiddenRouteClick(item.id) },
+                                onClick = { onRouteClick(item.id) },
                             )
                         }
                     }
@@ -670,13 +773,119 @@ private fun BrowseScreen(
             }
         }
     }
+}
 
-    state.routeList.hiddenRoutes?.deleteDialog?.let { dialogState ->
-        DeleteRouteDialog(
-            state = dialogState,
-            onConfirm = onConfirmDeleteHiddenRouteClick,
-            onDismiss = onDismissDeleteHiddenRouteClick,
-        )
+@Composable
+private fun RecordingScreen(
+    state: OpenRouteScreenState,
+    onTrackClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            shape = RoundedCornerShape(28.dp),
+        ) {
+            if (state.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                MapWebView(
+                    state = state.mapState,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        RouteSummary(state = state.summary)
+
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onTrackClick,
+        ) {
+            Text(state.actionBar.trackLabel)
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Text(
+                text = if (state.actionBar.isTracking) {
+                    "Grabando ruta localmente. Puedes bloquear la pantalla si la ubicación está en Permitir siempre y la batería sin restricciones."
+                } else {
+                    "Inicia una grabación para guardar una ruta nueva con distancia, tiempo y puntos registrados."
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BreadcrumbsScreen(
+    state: OpenRouteScreenState,
+    onBreadcrumbClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            shape = RoundedCornerShape(28.dp),
+        ) {
+            if (state.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                MapWebView(
+                    state = state.mapState,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        RouteSummary(state = state.summary)
+
+        Button(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = onBreadcrumbClick,
+        ) {
+            Text(state.actionBar.breadcrumbLabel)
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Text(
+                text = if (state.actionBar.isBreadcrumbing) {
+                    "Sembrando migas. Si te das la vuelta, la app cambiará a guía 3D para volver al punto inicial."
+                } else {
+                    "Este modo guarda tu rastro temporalmente para poder volver por donde viniste sin crear una ruta guardada."
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
     }
 }
 
@@ -689,6 +898,10 @@ private fun RouteDetailScreen(
     onRenameDraftChange: (String) -> Unit,
     onConfirmRenameRouteClick: () -> Unit,
     onDismissRenameRouteClick: () -> Unit,
+    onHideRouteClick: () -> Unit,
+    onDeleteRouteClick: () -> Unit,
+    onConfirmDeleteRouteClick: () -> Unit,
+    onDismissDeleteRouteClick: () -> Unit,
     onNavigationClick: () -> Unit,
     onStopNavigationClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -785,6 +998,12 @@ private fun RouteDetailScreen(
             )
         }
 
+        RouteDetailActions(
+            state = state,
+            onHideRouteClick = onHideRouteClick,
+            onDeleteRouteClick = onDeleteRouteClick,
+        )
+
         NavigationCard(
             state = state.navigationState,
             onNavigationClick = onNavigationClick,
@@ -798,6 +1017,47 @@ private fun RouteDetailScreen(
                 onConfirm = onConfirmRenameRouteClick,
                 onDismiss = onDismissRenameRouteClick,
             )
+        }
+
+        state.deleteDialog?.let { dialogState ->
+            DeleteRouteDialog(
+                state = dialogState,
+                onConfirm = onConfirmDeleteRouteClick,
+                onDismiss = onDismissDeleteRouteClick,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RouteDetailActions(
+    state: RouteDetailState,
+    onHideRouteClick: () -> Unit,
+    onDeleteRouteClick: () -> Unit,
+) {
+    if (!state.canHide && !state.canDelete) {
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (state.canHide) {
+            OutlinedButton(
+                modifier = Modifier.weight(1f),
+                onClick = onHideRouteClick,
+            ) {
+                Text(state.hideLabel)
+            }
+        }
+        if (state.canDelete) {
+            OutlinedButton(
+                modifier = Modifier.weight(1f),
+                onClick = onDeleteRouteClick,
+            ) {
+                Text(state.deleteLabel)
+            }
         }
     }
 }
@@ -912,53 +1172,6 @@ private fun Navigation3DScreen(
 }
 
 @Composable
-private fun ActionBar(
-    state: ActionBarState,
-    onImportClick: () -> Unit,
-    onTrackClick: () -> Unit,
-    onBreadcrumbClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Button(
-                modifier = Modifier.weight(1f),
-                onClick = onImportClick,
-                enabled = state.isImportEnabled,
-            ) {
-                if (state.showsImportProgress) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(state.importLabel)
-                }
-            }
-
-            Button(
-                modifier = Modifier.weight(1f),
-                onClick = onTrackClick,
-            ) {
-                Text(state.trackLabel)
-            }
-        }
-
-        Button(
-            modifier = Modifier.fillMaxWidth(),
-            onClick = onBreadcrumbClick,
-        ) {
-            Text(state.breadcrumbLabel)
-        }
-    }
-}
-
-@Composable
 private fun DownloadsBanner(
     state: DownloadsBannerState,
     onActionClick: () -> Unit,
@@ -1026,34 +1239,6 @@ private fun RouteSummary(state: SummaryState) {
                 value = state.activeDurationValue,
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-    }
-}
-
-@Composable
-private fun BrowseActions(
-    state: BrowseActionState,
-    onHideSelectedClick: () -> Unit,
-    onOpenDetailClick: () -> Unit,
-) {
-    if (!state.canHideSelected && !state.canOpenDetail) {
-        return
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-    ) {
-        if (state.canOpenDetail) {
-            OutlinedButton(onClick = onOpenDetailClick) {
-                Text(state.openDetailLabel)
-            }
-            Spacer(modifier = Modifier.size(8.dp))
-        }
-        if (state.canHideSelected) {
-            OutlinedButton(onClick = onHideSelectedClick) {
-                Text(state.hideLabel)
-            }
         }
     }
 }
@@ -1380,7 +1565,7 @@ private fun RouteRow(
 @Composable
 private fun HiddenRouteRow(
     state: HiddenRouteListItemState,
-    onDeleteClick: () -> Unit,
+    onClick: () -> Unit,
 ) {
     val badgeColor = when (state.badge) {
         RouteBadge.Recording -> MaterialTheme.colorScheme.tertiary
@@ -1390,7 +1575,8 @@ private fun HiddenRouteRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -1420,9 +1606,10 @@ private fun HiddenRouteRow(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            OutlinedButton(onClick = onDeleteClick) {
-                Text(state.deleteLabel)
-            }
+            AssistChip(
+                onClick = onClick,
+                label = { Text(state.badge.label) },
+            )
         }
     }
 }
@@ -1475,6 +1662,22 @@ private fun Context.resolveDownloadsAccessState(): DownloadsAccessState {
         ) == PackageManager.PERMISSION_GRANTED -> DownloadsAccessState.Granted
 
         else -> DownloadsAccessState.NeedsPermission
+    }
+}
+
+private fun Context.resolveAppVersionLabel(): String {
+    return runCatching {
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        val versionName = packageInfo.versionName ?: "desconocida"
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.versionCode.toLong()
+        }
+        "Versión $versionName ($versionCode)"
+    }.getOrElse {
+        "Versión desconocida"
     }
 }
 

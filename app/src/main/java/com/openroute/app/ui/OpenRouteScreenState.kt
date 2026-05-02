@@ -13,9 +13,17 @@ import com.openroute.app.location.BreadcrumbState
 import kotlin.math.roundToInt
 
 enum class OpenRouteScreenMode {
-    Browse,
+    Routes,
+    Recording,
+    Breadcrumbs,
     Detail,
     Navigation3D,
+}
+
+enum class OpenRouteMainSection {
+    Routes,
+    Recording,
+    Breadcrumbs,
 }
 
 data class HeaderState(
@@ -31,13 +39,6 @@ data class ActionBarState(
     val showsImportProgress: Boolean = false,
     val isTracking: Boolean = false,
     val isBreadcrumbing: Boolean = false,
-)
-
-data class BrowseActionState(
-    val canHideSelected: Boolean = false,
-    val canOpenDetail: Boolean = false,
-    val hideLabel: String = "Ocultar seleccionada",
-    val openDetailLabel: String = "Ver detalle",
 )
 
 data class SummaryState(
@@ -70,7 +71,6 @@ data class HiddenRouteListItemState(
     val title: String,
     val subtitle: String,
     val badge: RouteBadge,
-    val deleteLabel: String = "Eliminar",
 )
 
 data class HiddenRouteDeleteDialogState(
@@ -85,13 +85,13 @@ data class HiddenRoutesState(
     val toggleLabel: String,
     val isExpanded: Boolean,
     val items: List<HiddenRouteListItemState> = emptyList(),
-    val deleteDialog: HiddenRouteDeleteDialogState? = null,
 )
 
 data class RouteListState(
     val emptyMessage: String = "Todavía no hay rutas. Importa un GPX o empieza a grabar.",
     val items: List<RouteListItemState> = emptyList(),
     val hiddenRoutes: HiddenRoutesState? = null,
+    val deleteDialog: HiddenRouteDeleteDialogState? = null,
 )
 
 data class RouteDetailState(
@@ -103,9 +103,14 @@ data class RouteDetailState(
     val pointsLabel: String,
     val sourceLabel: String,
     val fileLabel: String? = null,
+    val canHide: Boolean = true,
+    val canDelete: Boolean = true,
+    val hideLabel: String = "Ocultar ruta",
+    val deleteLabel: String = "Eliminar ruta",
     val canRename: Boolean = false,
     val renameLabel: String = "Renombrar",
     val renameDialog: RouteRenameDialogState? = null,
+    val deleteDialog: HiddenRouteDeleteDialogState? = null,
     val backLabel: String = "Volver",
     val navigationState: RouteDetailNavigationState = RouteDetailNavigationState(),
 )
@@ -149,18 +154,25 @@ data class Navigation3DState(
 )
 
 data class OpenRouteScreenState(
-    val mode: OpenRouteScreenMode = OpenRouteScreenMode.Browse,
+    val mode: OpenRouteScreenMode = OpenRouteScreenMode.Routes,
     val header: HeaderState = HeaderState(),
     val actionBar: ActionBarState = ActionBarState(),
     val isLoading: Boolean = true,
     val isSyncingDownloads: Boolean = false,
     val mapState: MapRenderState = MapRenderState(),
     val summary: SummaryState = SummaryState(),
-    val browseAction: BrowseActionState = BrowseActionState(),
     val routeList: RouteListState = RouteListState(),
     val detailState: RouteDetailState? = null,
     val navigation3DState: Navigation3DState? = null,
+    val drawerItems: List<DrawerItemState> = emptyList(),
     val snackbarMessage: String? = null,
+)
+
+data class DrawerItemState(
+    val section: OpenRouteMainSection,
+    val title: String,
+    val subtitle: String,
+    val isSelected: Boolean,
 )
 
 enum class DownloadsAccessPresentation {
@@ -185,18 +197,24 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
     val effectiveCurrentLocation = navigationState.currentLocation ?: breadcrumbState.currentLocation ?: currentLocation
     val effectiveLiveTrack = when {
         navigationState.isNavigating -> navigationState.visitedPoints
-        breadcrumbState.isActive -> breadcrumbState.points
-        else -> liveTrack
+        mainSection == OpenRouteMainSection.Breadcrumbs && breadcrumbState.isActive -> breadcrumbState.points
+        mainSection == OpenRouteMainSection.Recording && isTracking -> liveTrack
+        else -> emptyList()
     }
-    val mapRoutes = if (detailRoute != null) {
-        visibleRoutes.filter { it.id == detailRoute.id }
-    } else {
-        visibleRoutes
+    val mapRoutes = when {
+        detailRoute != null -> listOf(detailRoute)
+        mainSection == OpenRouteMainSection.Routes -> visibleRoutes
+        else -> emptyList()
     }
     val mapFocus = when {
         detailRoute != null -> MapFocusState(
             routeId = detailRoute.id,
             includeCurrentLocation = true,
+        )
+
+        mainSection == OpenRouteMainSection.Routes && selectedRoute != null -> MapFocusState(
+            routeId = selectedRoute.id,
+            includeCurrentLocation = effectiveCurrentLocation != null,
         )
 
         effectiveLiveTrack.isNotEmpty() -> MapFocusState(
@@ -208,7 +226,6 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             preferCurrentLocationZoom = true,
         )
 
-        selectedRoute != null -> MapFocusState(routeId = selectedRoute.id)
         else -> MapFocusState()
     }
     val navigationProgress = navigation3DRoute?.let { route ->
@@ -231,7 +248,9 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
         mode = when {
             navigation3DState != null -> OpenRouteScreenMode.Navigation3D
             detailRoute != null -> OpenRouteScreenMode.Detail
-            else -> OpenRouteScreenMode.Browse
+            mainSection == OpenRouteMainSection.Recording -> OpenRouteScreenMode.Recording
+            mainSection == OpenRouteMainSection.Breadcrumbs -> OpenRouteScreenMode.Breadcrumbs
+            else -> OpenRouteScreenMode.Routes
         },
         header = when {
             navigation3DState != null -> HeaderState(
@@ -242,6 +261,25 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             detailRoute != null -> HeaderState(
                 title = detailRoute.name,
                 subtitle = detailRoute.metricsSubtitle(),
+            )
+
+            mainSection == OpenRouteMainSection.Routes -> HeaderState(
+                title = "Rutas",
+                subtitle = "${visibleRoutes.size} visibles · ${hiddenRoutes.size} ocultas",
+            )
+
+            mainSection == OpenRouteMainSection.Recording -> HeaderState(
+                title = "Grabar ruta",
+                subtitle = if (isTracking) "Grabando recorrido local" else "Registra una ruta nueva",
+            )
+
+            mainSection == OpenRouteMainSection.Breadcrumbs -> HeaderState(
+                title = "Migas de pan",
+                subtitle = when {
+                    breadcrumbState.isReturning -> "Volviendo al inicio"
+                    breadcrumbState.isActive -> "Sembrando rastro"
+                    else -> "Deja un rastro para volver"
+                },
             )
 
             else -> HeaderState()
@@ -276,7 +314,7 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
         ),
         summary = SummaryState(
             routesValue = visibleRoutes.size.toString(),
-            liveTrackValue = if (isTracking || navigationState.isNavigating || breadcrumbState.isActive) {
+            liveTrackValue = if (navigationState.isNavigating || effectiveLiveTrack.isNotEmpty()) {
                 effectiveLiveTrack.size.toString()
             } else {
                 "off"
@@ -284,10 +322,6 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             selectedValue = selectedRoute?.distanceMeters.toDistanceLabel(),
             activeDurationLabel = activeDurationLabel,
             activeDurationValue = activeDurationValue,
-        ),
-        browseAction = BrowseActionState(
-            canHideSelected = selectedRoute != null,
-            canOpenDetail = selectedRoute != null,
         ),
         routeList = RouteListState(
             emptyMessage = if (hiddenRoutes.isNotEmpty()) {
@@ -330,14 +364,12 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
                     } else {
                         emptyList()
                     },
-                    deleteDialog = routePendingDeletion
-                        ?.takeIf(RouteTrack::isHidden)
-                        ?.let { route ->
-                            HiddenRouteDeleteDialogState(
-                                title = "Eliminar ruta oculta",
-                                message = "Se borrará \"${route.name}\" de OpenRoute.",
-                            )
-                        },
+                )
+            },
+            deleteDialog = routePendingDeletion?.let { route ->
+                HiddenRouteDeleteDialogState(
+                    title = if (route.isHidden) "Eliminar ruta oculta" else "Eliminar ruta",
+                    message = "Se borrará \"${route.name}\" de OpenRoute.",
                 )
             },
         ),
@@ -345,9 +377,34 @@ internal fun OpenRouteUiState.toScreenState(): OpenRouteScreenState {
             isNavigating = navigationState.isActiveFor(detailRoute.id),
             progress = navigationState.progressFor(detailRoute.id),
             renameDraft = renameDraft.takeIf { renameRouteId == detailRoute.id },
+            routePendingDeletion = routePendingDeletion,
         ),
         navigation3DState = navigation3DState,
+        drawerItems = mainSection.toDrawerItems(),
         snackbarMessage = message,
+    )
+}
+
+private fun OpenRouteMainSection.toDrawerItems(): List<DrawerItemState> {
+    return listOf(
+        DrawerItemState(
+            section = OpenRouteMainSection.Routes,
+            title = "Rutas",
+            subtitle = "Visualiza, importa y gestiona rutas",
+            isSelected = this == OpenRouteMainSection.Routes,
+        ),
+        DrawerItemState(
+            section = OpenRouteMainSection.Recording,
+            title = "Grabar ruta",
+            subtitle = "Registra una nueva salida",
+            isSelected = this == OpenRouteMainSection.Recording,
+        ),
+        DrawerItemState(
+            section = OpenRouteMainSection.Breadcrumbs,
+            title = "Migas de pan",
+            subtitle = "Deja rastro para volver",
+            isSelected = this == OpenRouteMainSection.Breadcrumbs,
+        ),
     )
 }
 
@@ -382,6 +439,7 @@ private fun RouteTrack.toDetailState(
     isNavigating: Boolean,
     progress: RouteNavigationProgress?,
     renameDraft: String?,
+    routePendingDeletion: RouteTrack?,
 ): RouteDetailState {
     return RouteDetailState(
         routeId = id,
@@ -392,11 +450,19 @@ private fun RouteTrack.toDetailState(
         pointsLabel = points.size.toString(),
         sourceLabel = if (source == RouteSource.RECORDED) "REC" else "GPX",
         fileLabel = originalFileName,
+        canHide = !isHidden,
+        canDelete = true,
         canRename = source == RouteSource.RECORDED,
         renameDialog = renameDraft?.takeIf { source == RouteSource.RECORDED }?.let { draft ->
             RouteRenameDialogState(
                 name = draft,
                 isConfirmEnabled = draft.trim().isNotEmpty(),
+            )
+        },
+        deleteDialog = routePendingDeletion?.takeIf { it.id == id }?.let { route ->
+            HiddenRouteDeleteDialogState(
+                title = if (route.isHidden) "Eliminar ruta oculta" else "Eliminar ruta",
+                message = "Se borrará \"${route.name}\" de OpenRoute.",
             )
         },
         navigationState = RouteDetailNavigationState(

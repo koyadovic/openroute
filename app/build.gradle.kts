@@ -7,6 +7,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val appVersionMajor = 0
+val appVersionMinor = 1
+val appVersionPatch = gitCommitCount().coerceAtLeast(1)
+
 android {
     namespace = "com.openroute.app"
     compileSdk = 34
@@ -15,8 +19,8 @@ android {
         applicationId = "com.openroute.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionPatch
+        versionName = "$appVersionMajor.$appVersionMinor.$appVersionPatch"
     }
 
     buildTypes {
@@ -49,6 +53,22 @@ kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
     }
+}
+
+fun gitCommitCount(): Int {
+    return runCatching {
+        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .directory(rootDir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText().trim()
+        val exitCode = process.waitFor()
+        if (exitCode == 0) {
+            output.toInt()
+        } else {
+            1
+        }
+    }.getOrDefault(1)
 }
 
 dependencies {

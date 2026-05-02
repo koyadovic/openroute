@@ -15,7 +15,7 @@ import org.junit.Test
 
 class OpenRouteScreenStateTest {
     @Test
-    fun `maps browse state into presentation state`() {
+    fun `maps routes state into presentation state`() {
         val route = RouteTrack(
             id = "route-1",
             name = "Sunday Ride",
@@ -39,26 +39,24 @@ class OpenRouteScreenStateTest {
             isLoading = false,
             isImporting = true,
             isSyncingDownloads = true,
-            isTracking = true,
             routes = listOf(route, hiddenRoute),
             selectedRouteId = route.id,
-            liveTrack = listOf(LatLngPoint(40.41, -3.71)),
             currentLocation = LatLngPoint(40.41, -3.71),
             message = "Ruta guardada",
         ).toScreenState()
 
-        assertEquals(OpenRouteScreenMode.Browse, screenState.mode)
+        assertEquals(OpenRouteScreenMode.Routes, screenState.mode)
         assertFalse(screenState.isLoading)
         assertTrue(screenState.isSyncingDownloads)
         assertFalse(screenState.actionBar.isImportEnabled)
         assertTrue(screenState.actionBar.showsImportProgress)
-        assertEquals("Stop recording", screenState.actionBar.trackLabel)
+        assertEquals("Start recording", screenState.actionBar.trackLabel)
         assertEquals("1", screenState.summary.routesValue)
-        assertEquals("1", screenState.summary.liveTrackValue)
+        assertEquals("off", screenState.summary.liveTrackValue)
         assertEquals("12.3 km", screenState.summary.selectedValue)
-        assertTrue(screenState.browseAction.canHideSelected)
-        assertTrue(screenState.browseAction.canOpenDetail)
         assertEquals("Ruta guardada", screenState.snackbarMessage)
+        assertEquals(3, screenState.drawerItems.size)
+        assertEquals(OpenRouteMainSection.Routes, screenState.drawerItems.single { it.isSelected }.section)
         assertEquals(1, screenState.routeList.items.size)
         assertTrue(screenState.routeList.items.single().isSelected)
         assertFalse(screenState.routeList.items.single().showsNewBadge)
@@ -67,7 +65,7 @@ class OpenRouteScreenStateTest {
         assertEquals("1", screenState.routeList.hiddenRoutes?.countLabel)
         assertEquals("Mostrar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
         assertTrue(screenState.routeList.hiddenRoutes?.items?.isEmpty() == true)
-        assertEquals(1, screenState.mapState.liveTrack.size)
+        assertEquals(0, screenState.mapState.liveTrack.size)
         assertEquals("#073B67", screenState.mapState.routes.single().color)
         assertNull(screenState.detailState)
     }
@@ -77,12 +75,16 @@ class OpenRouteScreenStateTest {
         val screenState = OpenRouteUiState(
             isLoading = false,
             isTracking = true,
+            mainSection = OpenRouteMainSection.Recording,
             trackingStartedAtMillis = 1_000L,
             clockNowMillis = 126_000L,
             liveTrack = listOf(LatLngPoint(40.41, -3.71)),
             currentLocation = LatLngPoint(40.41, -3.71),
         ).toScreenState()
 
+        assertEquals(OpenRouteScreenMode.Recording, screenState.mode)
+        assertEquals("1", screenState.summary.liveTrackValue)
+        assertEquals(1, screenState.mapState.liveTrack.size)
         assertEquals("Tiempo grabando", screenState.summary.activeDurationLabel)
         assertEquals("2m 05s", screenState.summary.activeDurationValue)
     }
@@ -134,6 +136,8 @@ class OpenRouteScreenStateTest {
         assertEquals("10.0 km", screenState.detailState?.distanceLabel)
         assertEquals("1h 30m", screenState.detailState?.durationLabel)
         assertEquals("sierra-loop.gpx", screenState.detailState?.fileLabel)
+        assertTrue(screenState.detailState?.canHide == true)
+        assertTrue(screenState.detailState?.canDelete == true)
         assertEquals(1, screenState.mapState.routes.size)
         assertEquals(route.id, screenState.mapState.routes.single().id)
         assertEquals(route.id, screenState.mapState.focus.routeId)
@@ -332,8 +336,38 @@ class OpenRouteScreenStateTest {
         assertEquals("Ocultar ocultas", screenState.routeList.hiddenRoutes?.toggleLabel)
         assertEquals(listOf("hidden-recorded", "hidden-imported"), screenState.routeList.hiddenRoutes?.items?.map { it.id })
         assertEquals(RouteBadge.Recording, screenState.routeList.hiddenRoutes?.items?.first()?.badge)
-        assertEquals("Eliminar ruta oculta", screenState.routeList.hiddenRoutes?.deleteDialog?.title)
-        assertTrue(screenState.routeList.hiddenRoutes?.deleteDialog?.message?.contains("Hidden GPX") == true)
+        assertEquals("Eliminar ruta oculta", screenState.routeList.deleteDialog?.title)
+        assertTrue(screenState.routeList.deleteDialog?.message?.contains("Hidden GPX") == true)
+    }
+
+    @Test
+    fun `opens hidden route detail with delete action but without hide action`() {
+        val hiddenRoute = RouteTrack(
+            id = "hidden-detail",
+            name = "Hidden Detail",
+            source = RouteSource.IMPORTED_GPX,
+            createdAtMillis = 1_700_000_000_000,
+            distanceMeters = 4_200.0,
+            points = listOf(
+                LatLngPoint(40.42, -3.68),
+                LatLngPoint(40.43, -3.67),
+            ),
+            isHidden = true,
+        )
+
+        val screenState = OpenRouteUiState(
+            isLoading = false,
+            routes = listOf(hiddenRoute),
+            detailRouteId = hiddenRoute.id,
+            deleteRouteId = hiddenRoute.id,
+        ).toScreenState()
+
+        assertEquals(OpenRouteScreenMode.Detail, screenState.mode)
+        assertEquals(hiddenRoute.id, screenState.detailState?.routeId)
+        assertFalse(screenState.detailState?.canHide == true)
+        assertTrue(screenState.detailState?.canDelete == true)
+        assertEquals("Eliminar ruta oculta", screenState.detailState?.deleteDialog?.title)
+        assertEquals(hiddenRoute.id, screenState.mapState.routes.single().id)
     }
 
     @Test
@@ -450,6 +484,7 @@ class OpenRouteScreenStateTest {
 
         val screenState = OpenRouteUiState(
             isLoading = false,
+            mainSection = OpenRouteMainSection.Breadcrumbs,
             clockNowMillis = 1_700_000_090_000,
             breadcrumbState = BreadcrumbState(
                 isActive = true,
