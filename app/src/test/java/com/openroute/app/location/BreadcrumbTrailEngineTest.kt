@@ -55,6 +55,37 @@ class BreadcrumbTrailEngineTest {
         assertTrue(!state.isReturning)
         assertEquals(pointNorth(metersNorth = 40.0, metersEast = 45.0), state.points.last())
     }
+
+    @Test
+    fun `uses shortest known trail to start when returning at an intersection`() {
+        var state = BreadcrumbTrailEngine.start(startedAtMillis = 1_000L)
+        listOf(
+            pointNorth(metersNorth = 0.0, metersEast = 0.0),
+            pointNorth(metersNorth = 0.0, metersEast = 100.0),
+            pointNorth(metersNorth = 100.0, metersEast = 100.0),
+            pointNorth(metersNorth = 100.0, metersEast = 0.0),
+            pointNorth(metersNorth = 0.0, metersEast = 50.0),
+            pointNorth(metersNorth = 0.0, metersEast = 150.0),
+        ).forEach { point ->
+            state = BreadcrumbTrailEngine.update(
+                state = state,
+                point = point,
+                appendBreadcrumb = true,
+            )
+        }
+
+        state = BreadcrumbTrailEngine.update(
+            state = state,
+            point = pointNorth(metersNorth = 0.0, metersEast = 50.0),
+            appendBreadcrumb = true,
+        )
+
+        assertEquals(BreadcrumbMode.Returning, state.mode)
+        assertTrue(state.isReturning)
+        assertTrue((state.route?.distanceMeters ?: 0.0) in 45.0..65.0)
+        assertTrue((state.progress?.remainingDistanceMeters ?: 0.0) in 45.0..65.0)
+    }
+
 }
 
 private fun pointNorth(
