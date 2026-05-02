@@ -13,6 +13,7 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -70,6 +72,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.openroute.app.R
 
 @Composable
 fun MainRoute(viewModel: MainViewModel) {
@@ -417,16 +420,26 @@ fun OpenRouteScreen(
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
                 title = {
-                    Column {
-                        Text(
-                            text = state.header.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_openroute_launcher),
+                            contentDescription = null,
+                            modifier = Modifier.size(42.dp),
                         )
-                        Text(
-                            text = state.header.subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Column {
+                            Text(
+                                text = state.header.title,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = state.header.subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 },
             )
@@ -1217,8 +1230,8 @@ private fun RouteRow(
 ) {
     val borderColor = if (state.isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
     val badgeColor = when (state.badge) {
-        RouteBadge.Recording -> Color(0xFFD95D39)
-        RouteBadge.Imported -> Color(0xFF1D3557)
+        RouteBadge.Recording -> MaterialTheme.colorScheme.tertiary
+        RouteBadge.Imported -> MaterialTheme.colorScheme.secondary
     }
 
     Card(
@@ -1258,8 +1271,8 @@ private fun RouteRow(
                     AssistChip(
                         onClick = onClick,
                         colors = AssistChipDefaults.assistChipColors(
-                            containerColor = Color(0xFFFFE8A3),
-                            labelColor = Color(0xFF6B4F00),
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
                         ),
                         label = { Text("Nueva") },
                     )
@@ -1279,8 +1292,8 @@ private fun HiddenRouteRow(
     onDeleteClick: () -> Unit,
 ) {
     val badgeColor = when (state.badge) {
-        RouteBadge.Recording -> Color(0xFFD95D39)
-        RouteBadge.Imported -> Color(0xFF1D3557)
+        RouteBadge.Recording -> MaterialTheme.colorScheme.tertiary
+        RouteBadge.Imported -> MaterialTheme.colorScheme.secondary
     }
 
     Card(
