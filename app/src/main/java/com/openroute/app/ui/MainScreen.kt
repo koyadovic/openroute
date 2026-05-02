@@ -743,7 +743,7 @@ private fun RoutesScreen(
             )
         }
 
-        ActivitySummary(state = state.summary)
+        RouteSummary(state = state.summary)
 
         Card(
             modifier = Modifier
@@ -888,7 +888,7 @@ private fun BreadcrumbsScreen(
             }
         }
 
-        RouteSummary(state = state.summary)
+        ActivitySummary(state = state.summary)
 
         Button(
             modifier = Modifier.fillMaxWidth(),
