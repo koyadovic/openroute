@@ -15,10 +15,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.openroute.app.R
 
 @Composable
@@ -31,16 +29,9 @@ internal fun OpenRouteSplash(modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.Center,
     ) {
         Image(
-            painter = painterResource(R.drawable.ic_openroute_launcher),
+            painter = painterResource(R.drawable.ic_openroute_logo_full),
             contentDescription = null,
-            modifier = Modifier.size(208.dp),
-        )
-        OpenRouteWordmark(
-            style = MaterialTheme.typography.displaySmall.copy(
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 48.sp,
-                letterSpacing = (-1.6).sp,
-            ),
+            modifier = Modifier.size(300.dp),
         )
     }
 }
