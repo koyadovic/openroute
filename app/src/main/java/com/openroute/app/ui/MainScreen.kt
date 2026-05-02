@@ -743,7 +743,7 @@ private fun RoutesScreen(
             )
         }
 
-        RouteSummary(state = state.summary)
+        ActivitySummary(state = state.summary)
 
         Card(
             modifier = Modifier
@@ -831,7 +831,7 @@ private fun RecordingScreen(
             }
         }
 
-        RouteSummary(state = state.summary)
+        ActivitySummary(state = state.summary)
 
         Button(
             modifier = Modifier.fillMaxWidth(),
@@ -1255,6 +1255,27 @@ private fun RouteSummary(state: SummaryState) {
                 label = state.activeDurationLabel,
                 value = state.activeDurationValue,
                 modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActivitySummary(state: SummaryState) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SummaryChip(
+            label = state.liveTrackLabel,
+            value = state.liveTrackValue,
+            modifier = Modifier.weight(1f),
+        )
+        if (state.activeDurationLabel != null && state.activeDurationValue != null) {
+            SummaryChip(
+                label = state.activeDurationLabel,
+                value = state.activeDurationValue,
+                modifier = Modifier.weight(1f),
             )
         }
     }
